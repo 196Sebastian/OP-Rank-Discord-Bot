@@ -49,6 +49,21 @@ module.exports = {
         embeds: [embed],
         components: [row],
       });
+
+      const targetUserInteraction = await reply
+        .awaitMessageComponent({
+          filter: (i) => i.user.id === targetUser.id,
+          time: 30_000,
+        })
+        .catch(async (error) => {
+          embed.setDescription("Game Over");
+          await reply.edit({ embeds: [embed], components: [] });
+        });
+
+      if (!targetUserInteraction) return;
+
+      // Todo
+      const targetUserChoice = choices.find((choice))
     } catch (error) {
       console.log("Error with /lfg");
       console.log(error);
