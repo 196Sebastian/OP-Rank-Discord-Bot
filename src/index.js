@@ -1,15 +1,16 @@
 require("dotenv").config();
 
-const { Client, IntentsBitField } = require("discord.js");
+const { Client } = require("discord.js");
+const { CommandKit } = require("commandkit");
 
 const client = new Client({
-  intents: [
-    IntentsBitField.Flags.Guilds,
-    IntentsBitField.Flags.GuildMembers,
-    IntentsBitField.Flags.GuildMessages,
-    IntentsBitField.Flags.MessageContent,
-  ],
+  intents: ["Guilds", "GuildMembers", "GuildMessages", "MessageContent"],
 });
 
+new CommandKit({
+  client,
+  commandsPath: `${__dirname}/commands`,
+  bulkRegister: true,
+});
 
 client.login(process.env.BOT_TOKEN);
