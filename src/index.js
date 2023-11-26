@@ -12,6 +12,9 @@ const client = new Client({
   ],
 });
 
+// const gameState = {}; // Declare gameState globally
+const gameTimeouts = {};
+
 const eloSystem = {
   userElo: new Map(), // Store user Elo ratings
   gameStates: new Map(), // Store game states
@@ -129,7 +132,13 @@ async function challengeCommand(message, args) {
 
 // Report command
 async function reportCommand(message, args) {
-  const [result, username] = args;
+  console.log("Args received:", args); // Add this line
+
+  const [result, ...usernameArray] = args;
+  const username = usernameArray.join(" ");
+
+  console.log("Result:", result); // Add this line
+  console.log("Username:", username); // Add this line
 
   if (!result) {
     return message.reply(
@@ -137,8 +146,17 @@ async function reportCommand(message, args) {
     );
   }
 
+  if (!username) {
+    console.error(
+      `"Error: Invalid or non-existent user mentioned or is a bot. ${username}"`
+    );
+    return message.reply(
+      "Invalid or non-existent user mentioned. Please challenge someone first."
+    );
+  }
+
   const challengerUser = message.author;
-  let opponentUser =
+  const opponentUser =
     message.mentions.users.first() ||
     findUserByUsername(message.guild, username);
 
@@ -165,7 +183,7 @@ async function reportCommand(message, args) {
 
   const gameId = `${challengerUser.id}-${opponentUser.id}`;
 
-  if (!gameTimeouts[gameId]) {
+  if (!eloSystem.gameStates.has(gameId)) {
     console.error("Error: No active game found to report.");
     return message.reply(
       "No active game found to report. Please challenge someone first."
@@ -202,8 +220,11 @@ async function reportCommand(message, args) {
           endGame(gameId, result.toLowerCase());
 
           // Update game state when players confirm the result
-          gameState.player1Reported = true;
-          gameState.player2Reported = true;
+          const gameInfo = eloSystem.gameStates.get(gameId);
+          if (gameInfo) {
+            gameInfo.player1Reported = true;
+            gameInfo.player2Reported = true;
+          }
 
           message.channel.send(
             "Game reported and confirmed. The game is now concluded."
@@ -211,6 +232,9 @@ async function reportCommand(message, args) {
         } else {
           message.channel.send("Game report confirmation declined.");
         }
+
+        // Stop the collector, even if the confirmation is collected
+        confirmationCollector.stop();
       });
 
       confirmationCollector.on("end", (_, reason) => {
@@ -229,16 +253,31 @@ async function reportCommand(message, args) {
 
 // Function to find a user by username in the guild
 function findUserByUsername(guild, username) {
-  return guild.members.cache.find((member) => {
-    const user = member.user || member;
-    return (
-      user &&
-      user.username &&
-      user.displayName &&
-      (user.username.toLowerCase() === username.toLowerCase() ||
-        user.displayName.toLowerCase() === username.toLowerCase())
-    );
-  })?.user;
+  // Check if username is defined
+  if (!username) {
+    console.error("Error: Username is undefined or null.");
+    return null;
+  }
+
+  // Convert the username to lowercase for case-insensitive comparison
+  const lowerCaseUsername = username.toLowerCase();
+
+  const member = guild.members.cache.find((member) => {
+    const user = member.user;
+
+    // Check if user is defined and the username matches (case-insensitive)
+    const usernameMatches =
+      user && user.username.toLowerCase() === lowerCaseUsername;
+
+    // Log the username, lowercased username, and whether it matches
+    console.log(`Username: ${user ? user.username : "undefined"}`);
+    console.log(`Lowercased Username: ${lowerCaseUsername}`);
+    console.log(`Username Matches: ${usernameMatches}`);
+
+    return usernameMatches;
+  });
+
+  return member ? member.user : null;
 }
 
 // Function to check if a user is in a game
@@ -268,6 +307,12 @@ function startGame(player1, player2, gameId) {
   gameTimeouts[player1.id] = setTimeout(() => endGame(gameId), 3300000); // 55 minutes
   gameTimeouts[player2.id] = setTimeout(() => endGame(gameId), 3300000);
 
+  // Create gameState object
+  eloSystem.gameStates.set(gameId, {
+    player1Reported: false,
+    player2Reported: false,
+  });
+
   // Send game announcement
   const channelId = process.env.UPDATE;
   const channel = client.channels.cache.get(channelId);
@@ -284,15 +329,15 @@ function startGame(player1, player2, gameId) {
   }
 
   console.log(`Game started between ${player1.tag} and ${player2.tag}.`);
-  channel.send(`Game started between ${player1} and ${player2}.`);
+  channel.send(`Game started between ${player1.tag} and ${player2.tag}.`);
 
   // Add time warnings
   setTimeout(
-    () => channel.send(`${player1} vs ${player2}: 30 minutes left.`),
+    () => channel.send(`${player1.tag} vs ${player2.tag}: 30 minutes left.`),
     1800000
   ); // 30 minutes
   setTimeout(
-    () => channel.send(`${player1} vs ${player2}: 1 minute left.`),
+    () => channel.send(`${player1.tag} vs ${player2.tag}: 1 minute left.`),
     2640000
   ); // 44 minutes
 }
@@ -307,8 +352,8 @@ function endGame(gameId, challengerWon) {
   clearTimeout(gameTimeouts[opponentUser.id]);
 
   // Check if the game has been reported by both players
-  const reportedByPlayer1 = gameState.player1Reported;
-  const reportedByPlayer2 = gameState.player2Reported;
+  const reportedByPlayer1 = eloSystem.gameStates.get(gameId)?.player1Reported;
+  const reportedByPlayer2 = eloSystem.gameStates.get(gameId)?.player2Reported;
 
   if (reportedByPlayer1 && reportedByPlayer2) {
     // Determine the winner and loser based on your game logic
@@ -335,26 +380,32 @@ function endGame(gameId, challengerWon) {
   }
 
   // Reset game state for the next game
-  gameState.player1Reported = false;
-  gameState.player2Reported = false;
+  eloSystem.gameStates.delete(gameId);
 }
 
 // Function to update Records
 function updateRecords(userId, result) {
-  userRecords[userId] = userRecords[userId] || {
-    gamesPlayed: 0,
-    gamesWon: 0,
-    gamesLost: 0,
-    gamesDrawn: 0,
-  };
-  userRecords[userId].gamesPlayed++;
+  // Use eloSystem.userRecords, which is a Map
+  eloSystem.userRecords.set(
+    userId,
+    eloSystem.userRecords.get(userId) || {
+      gamesPlayed: 0,
+      gamesWon: 0,
+      gamesLost: 0,
+      gamesDrawn: 0,
+    }
+  );
+
+  const userRecord = eloSystem.userRecords.get(userId);
+
+  userRecord.gamesPlayed++;
 
   if (result === "win") {
-    userRecords[userId].gamesWon++;
+    userRecord.gamesWon++;
   } else if (result === "lose") {
-    userRecords[userId].gamesLost++;
+    userRecord.gamesLost++;
   } else {
-    userRecords[userId].gamesDrawn++;
+    userRecord.gamesDrawn++;
   }
 }
 
@@ -363,8 +414,8 @@ function updateElo(winnerId, loserId, isDraw) {
   // K-factor, adjust as needed
   const k = 32;
 
-  const winnerElo = userElo[winnerId] || 1200;
-  const loserElo = userElo[loserId] || 1200;
+  const winnerElo = eloSystem.userElo.get(winnerId) || 1200;
+  const loserElo = eloSystem.userElo.get(loserId) || 1200;
 
   const expectedScoreWinner = 1 / (1 + 10 ** ((loserElo - winnerElo) / 400));
   const expectedScoreLoser = 1 / (1 + 10 ** ((winnerElo - loserElo) / 400));
@@ -374,30 +425,45 @@ function updateElo(winnerId, loserId, isDraw) {
   );
 
   // Update Elo ratings based on the game result
+  // Update Elo ratings based on the game result
   if (isDraw) {
-    userElo[winnerId] = Math.round(winnerElo + k * (0.5 - expectedScoreWinner));
-    userElo[loserId] = Math.round(loserElo + k * (0.5 - expectedScoreLoser));
+    eloSystem.userElo.set(
+      winnerId,
+      Math.round(winnerElo + k * (0.5 - expectedScoreWinner))
+    );
+    eloSystem.userElo.set(
+      loserId,
+      Math.round(loserElo + k * (0.5 - expectedScoreLoser))
+    );
   } else {
-    userElo[winnerId] = Math.round(winnerElo + k * (1 - expectedScoreWinner));
-    userElo[loserId] = Math.round(loserElo + k * (0 - expectedScoreLoser));
+    eloSystem.userElo.set(
+      winnerId,
+      Math.round(winnerElo + k * (1 - expectedScoreWinner))
+    );
+    eloSystem.userElo.set(
+      loserId,
+      Math.round(loserElo + k * (0 - expectedScoreLoser))
+    );
   }
 
   // Log updated Elo ratings (replace with your actual logging or storage logic)
   console.log(
-    `After update - Winner: ${winnerId}, Elo: ${userElo[winnerId]}, Loser: ${loserId}, Elo: ${userElo[loserId]}`
+    `After update - Winner: ${winnerId}, Elo: ${eloSystem.userElo.get(
+      winnerId
+    )}, Loser: ${loserId}, Elo: ${eloSystem.userElo.get(loserId)}`
   );
 }
 
 // Function to update the leaderboard
 function updateLeaderboard() {
-  console.log("eloSystem:", userElo);
-  const leaderboard = Object.entries(userElo)
+  console.log("eloSystem:", eloSystem.userElo);
+  const leaderboard = Array.from(eloSystem.userElo.entries())
     .sort(([, a], [, b]) => b - a)
     .map(([userId, elo]) => ({
       userId,
       elo,
       rank: getRank(elo),
-      record: userRecords[userId] || {
+      record: eloSystem.userRecords.get(userId) || {
         gamesPlayed: 0,
         gamesWon: 0,
         gamesLost: 0,
