@@ -96,9 +96,9 @@ async function challengeCommand(message, args) {
     return;
   }
 
-  // Set up reaction collector
+  // Set up reaction collector for the challenger
   const filter = (reaction, user) =>
-    user.id === opponentUser.id &&
+    user.id === challengerUser.id &&
     (reaction.emoji.name === "✅" || reaction.emoji.name === "❌");
 
   const collector = challengeMessage.createReactionCollector({
@@ -118,27 +118,58 @@ async function challengeCommand(message, args) {
       console.log(`${user.tag} declined the challenge.`);
       message.channel.send(`${user} declined the challenge.`);
     }
+
+    // Clean up the collector after it ends
+    collector.stop();
   });
 
   collector.on("end", (collected, reason) => {
     if (reason === "time" && collected.size === 0) {
       message.channel.send("Challenge timed out.");
     }
+  });
+
+  // Set up reaction collector for the opponent
+  const opponentCollector = challengeMessage.createReactionCollector({
+    filter: (reaction, user) =>
+      user.id === opponentUser.id &&
+      (reaction.emoji.name === "✅" || reaction.emoji.name === "❌"),
+    time: 45000,
+    max: 1,
+    errors: ["time"],
+  });
+
+  opponentCollector.on("collect", async (reaction, user) => {
+    console.log(`${user.tag} reacted with ${reaction.emoji.name}`);
+
+    if (reaction.emoji.name === "✅") {
+      console.log("start");
+      startGame(challengerUser, opponentUser, gameId);
+    } else if (reaction.emoji.name === "❌") {
+      console.log(`${user.tag} declined the challenge.`);
+      message.channel.send(`${user} declined the challenge.`);
+    }
 
     // Clean up the collector after it ends
-    collector.stop();
+    opponentCollector.stop();
+  });
+
+  opponentCollector.on("end", (collected, reason) => {
+    if (reason === "time" && collected.size === 0) {
+      message.channel.send("Challenge timed out.");
+    }
   });
 }
 
 // Report command
 async function reportCommand(message, args) {
-  console.log("Args received:", args); // Add this line
+  console.log("Args received:", args);
 
   const [result, ...usernameArray] = args;
   const username = usernameArray.join(" ");
 
-  console.log("Result:", result); // Add this line
-  console.log("Username:", username); // Add this line
+  console.log("Result:", result);
+  console.log("Username:", username);
 
   if (!result) {
     return message.reply(
@@ -156,11 +187,23 @@ async function reportCommand(message, args) {
   }
 
   const challengerUser = message.author;
-  const opponentUser =
+  let opponentUser =
     message.mentions.users.first() ||
-    findUserByUsername(message.guild, username);
+    (username.startsWith("<@") && username.endsWith(">")
+      ? client.users.cache.get(username.slice(2, -1))
+      : null);
 
-  // Rest of the code remains the same
+  // Check if the opponentUser is the same as the challengerUser
+  if (opponentUser && opponentUser.id === challengerUser.id) {
+    return message.reply("You cannot report a game against yourself.");
+  }
+
+  // If the opponentUser is not mentioned or is the challengerUser, try to find by username
+  if (!opponentUser) {
+    const guild = message.guild;
+    opponentUser = findUserByUsername(guild, username);
+  }
+
   if (!opponentUser) {
     console.error("Error: Invalid or non-existent user mentioned or is a bot.");
     return message.reply(
@@ -168,14 +211,24 @@ async function reportCommand(message, args) {
     );
   }
 
+  console.log("Challenger User:", challengerUser.tag);
+  console.log("Opponent User:", opponentUser.tag);
+
+  // Ensure both users are present in the eloSystem.userElo map
+  if (!eloSystem.userElo.has(challengerUser.id)) {
+    eloSystem.userElo.set(challengerUser.id, 1200);
+  }
+
+  if (!eloSystem.userElo.has(opponentUser.id)) {
+    eloSystem.userElo.set(opponentUser.id, 1200);
+  }
+
   console.error("Mentioned user:", message.mentions.users);
   console.error("Fetched member:", opponentUser);
 
-  if (!opponentUser || opponentUser.bot) {
-    console.error("Error: Invalid or non-existent user mentioned or is a bot.");
-    return message.reply(
-      "Invalid or non-existent user mentioned. Please challenge someone first."
-    );
+  if (opponentUser.bot) {
+    console.error("Error: Mentioned user is a bot.");
+    return message.reply("You cannot report a game against a bot.");
   }
 
   console.log("Challenger User:", challengerUser.tag);
@@ -208,7 +261,7 @@ async function reportCommand(message, args) {
 
       const confirmationCollector = confirmationMessage.createReactionCollector(
         {
-          confirmationFilter,
+          filter: confirmationFilter,
           time: 300000, // 5 minutes for confirmation
           max: 1,
         }
@@ -328,6 +381,19 @@ function startGame(player1, player2, gameId) {
     return;
   }
 
+  const updateChannel = client.channels.cache.get(process.env.UPDATE);
+  const leaderboardChannel = client.channels.cache.get(process.env.LEADERBOARD);
+
+  if (!updateChannel) {
+    console.error("Error: Update channel not found.");
+    return;
+  }
+
+  if (!leaderboardChannel) {
+    console.error("Error: Leaderboard channel not found.");
+    return;
+  }
+
   console.log(`Game started between ${player1.tag} and ${player2.tag}.`);
   channel.send(`Game started between ${player1.tag} and ${player2.tag}.`);
 
@@ -372,12 +438,17 @@ function endGame(gameId, challengerWon) {
     updateRecords(loserId, "lose");
     updateLeaderboard();
   } else {
-    // Game ends in a draw if not reported by both players
-    updateElo(challengerUser.id, opponentUser.id, true);
-    updateRecords(challengerUser.id, "draw");
-    updateRecords(opponentUser.id, "draw");
-    updateLeaderboard();
+    // Game ends in a draw only if both players confirm the result
+    if (reportedByPlayer1 || reportedByPlayer2) {
+      updateElo(challengerUser.id, opponentUser.id, true);
+      updateRecords(challengerUser.id, "draw");
+      updateRecords(opponentUser.id, "draw");
+      updateLeaderboard();
+    }
   }
+
+  // Reset game state for the next game
+  eloSystem.gameStates.delete(gameId);
 
   // Reset game state for the next game
   eloSystem.gameStates.delete(gameId);
@@ -425,25 +496,14 @@ function updateElo(winnerId, loserId, isDraw) {
   );
 
   // Update Elo ratings based on the game result
-  // Update Elo ratings based on the game result
   if (isDraw) {
-    eloSystem.userElo.set(
-      winnerId,
-      Math.round(winnerElo + k * (0.5 - expectedScoreWinner))
-    );
-    eloSystem.userElo.set(
-      loserId,
-      Math.round(loserElo + k * (0.5 - expectedScoreLoser))
-    );
+    const delta = k * (0.5 - expectedScoreWinner);
+    eloSystem.userElo.set(winnerId, Math.round(winnerElo + delta));
+    eloSystem.userElo.set(loserId, Math.round(loserElo - delta));
   } else {
-    eloSystem.userElo.set(
-      winnerId,
-      Math.round(winnerElo + k * (1 - expectedScoreWinner))
-    );
-    eloSystem.userElo.set(
-      loserId,
-      Math.round(loserElo + k * (0 - expectedScoreLoser))
-    );
+    const delta = k * (1 - expectedScoreWinner);
+    eloSystem.userElo.set(winnerId, Math.round(winnerElo + delta));
+    eloSystem.userElo.set(loserId, Math.round(loserElo - delta));
   }
 
   // Log updated Elo ratings (replace with your actual logging or storage logic)
