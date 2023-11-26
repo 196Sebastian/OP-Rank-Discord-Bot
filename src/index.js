@@ -12,17 +12,10 @@ const client = new Client({
   ],
 });
 
-const userElo = {}; // Store user Elo ratings
-const gameTimeouts = {}; // Store game timeouts
-const userRecords = {}; // Define a userRecords object to store user records
-
-let challengerUser; // Declare player1 in a scope accessible to both commands
-let opponentUser; // Define opponentUser in a scope accessible to both commands
-
-// Assuming you have a gameState object that tracks the state of the game
-const gameState = {
-  player1Reported: false,
-  player2Reported: false,
+const eloSystem = {
+  userElo: new Map(), // Store user Elo ratings
+  gameStates: new Map(), // Store game states
+  userRecords: new Map(), // Store user records
 };
 
 const ranks = {
@@ -37,193 +30,283 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   // Additional logic to initialize userElo when a user sends a message
-  if (!userElo[message.author.id]) {
-    userElo[message.author.id] = 1200;
+  if (!eloSystem.userElo.has(message.author.id)) {
+    eloSystem.userElo.set(message.author.id, 1200);
   }
 
-  // Challenge command
-  if (message.content.startsWith("/challenge")) {
-    const [_, opponent] = message.content.split(" ");
-
-    if (!opponent) {
-      return message.reply("You need to mention a user to challenge.");
-    }
-
-    challengerUser = message.author;
-    opponentUser = message.mentions.users.first();
-
-    if (!opponentUser) {
-      return message.reply("Invalid user mentioned.");
-    }
-
-    // Check if users are already in a game
-    if (gameTimeouts[challengerUser.id] || gameTimeouts[opponentUser.id]) {
-      return message.reply("One of the users is already in a game.");
-    }
-
-    // Send challenge message to opponent
-    const challengeMessage = await message.channel.send(
-      `${opponentUser}, ${challengerUser} has challenged you to a game. Do you accept?`
-    );
-
-    // React to the challenge message
-    try {
-      await challengeMessage.react("✅");
-      await challengeMessage.react("❌");
-    } catch (error) {
-      console.error("Error reacting to the challenge message:", error);
-      return;
-    }
-
-    // Set up reaction collector
-    const filter = (reaction, user) =>
-      user.id === opponentUser.id &&
-      (reaction.emoji.name === "✅" || reaction.emoji.name === "❌");
-
-    const collector = challengeMessage.createReactionCollector({
-      filter,
-      time: 45000,
-      max: 1, // Set max reactions to 1 to collect only one reaction
-      errors: ["time"], // Trigger 'end' event only on timeout
-    });
-
-    client.on("messageReactionAdd", (reaction, user) => {
-      if (user.id === opponentUser.id) {
-        console.log(`${user.tag} reacted with ${reaction.emoji.name}`);
-
-        if (reaction.emoji.name === "✅") {
-          console.log("start");
-          startGame(challengerUser, opponentUser);
-        } else if (reaction.emoji.name === "❌") {
-          console.log(`${user.tag} declined the challenge.`);
-          message.channel.send(`${user} declined the challenge.`);
-        }
-      }
-    });
-
-    collector.on("end", (collected, reason) => {
-      if (reason === "time" && collected.size === 0) {
-        message.channel.send("Challenge timed out.");
-      }
-    });
-  }
-  // Report command
-  if (message.content.startsWith("/report")) {
-    const [_, result] = message.content.split(" ");
-
-    if (!opponentUser) {
-      return message.reply(
-        "Opponent not defined. Please challenge someone first."
-      );
-    }
-
-    if (!result) {
-      return message.reply(
-        "Please provide the result of the game (win, lose, or draw)."
-      );
-    }
-
-    const gameId = `${message.author.id}-${opponentUser.id}`;
-
-    // Check if the game exists
-    if (gameTimeouts[message.author.id] && gameTimeouts[opponentUser.id]) {
-      // Check if the result is valid (win, lose, or draw)
-      if (["win", "lose", "draw"].includes(result.toLowerCase())) {
-        const confirmationMessage = await message.channel.send(
-          `${message.author}, do you confirm the result "${result}"?`
-        );
-
-        // React to the confirmation message
-        await confirmationMessage.react("👍");
-        await confirmationMessage.react("👎");
-
-        // Set up reaction collector for confirmation
-        const confirmationFilter = (reaction, user) =>
-          user.id === message.author.id &&
-          (reaction.emoji.name === "👍" || reaction.emoji.name === "👎");
-
-        const confirmationCollector =
-          confirmationMessage.createReactionCollector({
-            confirmationFilter,
-            time: 300000, // 5 minutes for confirmation
-            max: 1,
-          });
-
-        confirmationCollector.on("collect", async (reaction) => {
-          if (reaction.emoji.name === "👍") {
-            console.log("Collected reaction:", reaction.emoji.name);
-            endGame(gameId, result.toLowerCase());
-
-            // Update game state when players confirm the result
-            // How does this work? Not sure if this is correct
-            gameState.player1Reported = true;
-            gameState.player2Reported = true;
-
-            message.channel.send(
-              "Game reported and confirmed. The game is now concluded."
-            );
-          } else {
-            message.channel.send("Game report confirmation declined.");
-          }
-        });
-
-        confirmationCollector.on("end", (_, reason) => {
-          console.log("Confirmation collector ended. Reason:", reason);
-          if (reason === "time") {
-            message.channel.send("Game report confirmation timed out.");
-          }
-        });
-      } else {
-        message.reply(
-          'Invalid result. Please provide "win", "lose", or "draw".'
-        );
-      }
-    } else {
-      message.reply("No active game found to report.");
-    }
-  }
+  // Command processing
+  processCommand(message);
 });
 
+// Function to process commands
+async function processCommand(message) {
+  const [command, ...args] = message.content.split(" ");
+
+  if (command === "/challenge") {
+    await challengeCommand(message, args);
+  } else if (command === "/report") {
+    await reportCommand(message, args);
+  }
+  // Add more commands as needed
+}
+
+// Challenge command
+async function challengeCommand(message, args) {
+  const [opponent] = args;
+
+  if (!opponent) {
+    return message.reply("You need to mention a user to challenge.");
+  }
+
+  const challengerUser = message.author;
+  let opponentUser = message.mentions.users.first();
+
+  if (!opponentUser) {
+    const username = args.slice(1).join(" ");
+    if (username) {
+      opponentUser = findUserByUsername(message.guild, username);
+    }
+  }
+
+  if (!opponentUser) {
+    return message.reply("Invalid user mentioned or user not found.");
+  }
+
+  // Check if users are already in a game
+  if (isUserInGame(challengerUser) || isUserInGame(opponentUser)) {
+    return message.reply("One of the users is already in a game.");
+  }
+
+  const gameId = `${challengerUser.id}-${opponentUser.id}`;
+
+  // Send challenge message to opponent
+  const challengeMessage = await message.channel.send(
+    `${opponentUser}, ${challengerUser} has challenged you to a game. Do you accept?`
+  );
+
+  // React to the challenge message
+  try {
+    await challengeMessage.react("✅");
+    await challengeMessage.react("❌");
+  } catch (error) {
+    console.error("Error reacting to the challenge message:", error);
+    return;
+  }
+
+  // Set up reaction collector
+  const filter = (reaction, user) =>
+    user.id === opponentUser.id &&
+    (reaction.emoji.name === "✅" || reaction.emoji.name === "❌");
+
+  const collector = challengeMessage.createReactionCollector({
+    filter,
+    time: 45000,
+    max: 1,
+    errors: ["time"],
+  });
+
+  collector.on("collect", async (reaction, user) => {
+    console.log(`${user.tag} reacted with ${reaction.emoji.name}`);
+
+    if (reaction.emoji.name === "✅") {
+      console.log("start");
+      startGame(challengerUser, opponentUser, gameId);
+    } else if (reaction.emoji.name === "❌") {
+      console.log(`${user.tag} declined the challenge.`);
+      message.channel.send(`${user} declined the challenge.`);
+    }
+  });
+
+  collector.on("end", (collected, reason) => {
+    if (reason === "time" && collected.size === 0) {
+      message.channel.send("Challenge timed out.");
+    }
+
+    // Clean up the collector after it ends
+    collector.stop();
+  });
+}
+
+// Report command
+async function reportCommand(message, args) {
+  const [result, username] = args;
+
+  if (!result) {
+    return message.reply(
+      "Please provide the result of the game (win, lose, or draw)."
+    );
+  }
+
+  const challengerUser = message.author;
+  let opponentUser =
+    message.mentions.users.first() ||
+    findUserByUsername(message.guild, username);
+
+  // Rest of the code remains the same
+  if (!opponentUser) {
+    console.error("Error: Invalid or non-existent user mentioned or is a bot.");
+    return message.reply(
+      "Invalid or non-existent user mentioned. Please challenge someone first."
+    );
+  }
+
+  console.error("Mentioned user:", message.mentions.users);
+  console.error("Fetched member:", opponentUser);
+
+  if (!opponentUser || opponentUser.bot) {
+    console.error("Error: Invalid or non-existent user mentioned or is a bot.");
+    return message.reply(
+      "Invalid or non-existent user mentioned. Please challenge someone first."
+    );
+  }
+
+  console.log("Challenger User:", challengerUser.tag);
+  console.log("Opponent User:", opponentUser.tag);
+
+  const gameId = `${challengerUser.id}-${opponentUser.id}`;
+
+  if (!gameTimeouts[gameId]) {
+    console.error("Error: No active game found to report.");
+    return message.reply(
+      "No active game found to report. Please challenge someone first."
+    );
+  }
+
+  // Check if the game exists
+  if (gameTimeouts[challengerUser.id] && gameTimeouts[opponentUser.id]) {
+    if (["win", "lose", "draw"].includes(result.toLowerCase())) {
+      const confirmationMessage = await message.channel.send(
+        `${message.author}, do you confirm the result "${result}"?`
+      );
+
+      // React to the confirmation message
+      await confirmationMessage.react("👍");
+      await confirmationMessage.react("👎");
+
+      // Set up reaction collector for confirmation
+      const confirmationFilter = (reaction, user) =>
+        user.id === message.author.id &&
+        (reaction.emoji.name === "👍" || reaction.emoji.name === "👎");
+
+      const confirmationCollector = confirmationMessage.createReactionCollector(
+        {
+          confirmationFilter,
+          time: 300000, // 5 minutes for confirmation
+          max: 1,
+        }
+      );
+
+      confirmationCollector.on("collect", async (reaction) => {
+        if (reaction.emoji.name === "👍") {
+          console.log("Collected reaction:", reaction.emoji.name);
+          endGame(gameId, result.toLowerCase());
+
+          // Update game state when players confirm the result
+          gameState.player1Reported = true;
+          gameState.player2Reported = true;
+
+          message.channel.send(
+            "Game reported and confirmed. The game is now concluded."
+          );
+        } else {
+          message.channel.send("Game report confirmation declined.");
+        }
+      });
+
+      confirmationCollector.on("end", (_, reason) => {
+        console.log("Confirmation collector ended. Reason:", reason);
+        if (reason === "time") {
+          message.channel.send("Game report confirmation timed out.");
+        }
+      });
+    } else {
+      message.reply('Invalid result. Please provide "win", "lose", or "draw".');
+    }
+  } else {
+    message.reply("No active game found to report.");
+  }
+}
+
+// Function to find a user by username in the guild
+function findUserByUsername(guild, username) {
+  return guild.members.cache.find((member) => {
+    const user = member.user || member;
+    return (
+      user &&
+      user.username &&
+      user.displayName &&
+      (user.username.toLowerCase() === username.toLowerCase() ||
+        user.displayName.toLowerCase() === username.toLowerCase())
+    );
+  })?.user;
+}
+
+// Function to check if a user is in a game
+function isUserInGame(user) {
+  const gameId = findGameIdByUserId(user.id);
+  return gameId ? true : false;
+}
+
+// Function to find the game ID by user ID
+function findGameIdByUserId(userId) {
+  for (const [gameId, { player1, player2 }] of eloSystem.gameStates.entries()) {
+    if (player1.id === userId || player2.id === userId) {
+      return gameId;
+    }
+  }
+  return null;
+}
+
 // Function to start the game
-function startGame(player1, player2) {
+function startGame(player1, player2, gameId) {
   if (!player1 || !player2) {
     console.error("Error: Invalid players for starting the game.");
     return;
   }
-  const gameId = `${player1.id}-${player2.id}`;
 
   // Set up game timeouts
   gameTimeouts[player1.id] = setTimeout(() => endGame(gameId), 3300000); // 55 minutes
   gameTimeouts[player2.id] = setTimeout(() => endGame(gameId), 3300000);
 
   // Send game announcement
-  const channel = client.channels.cache.get(process.env.UPDATE);
+  const channelId = process.env.UPDATE;
+  const channel = client.channels.cache.get(channelId);
+
+  // Add this code before trying to get the channel
+  console.log(
+    "Available channels:",
+    client.channels.cache.map((channel) => channel.id)
+  );
+
   if (!channel) {
     console.error("Error: Channel not found.");
     return;
   }
 
+  console.log(`Game started between ${player1.tag} and ${player2.tag}.`);
   channel.send(`Game started between ${player1} and ${player2}.`);
 
   // Add time warnings
   setTimeout(
-    () =>
-      client.channels.cache.get(process.env.UPDATE).send("30 minutes left."),
+    () => channel.send(`${player1} vs ${player2}: 30 minutes left.`),
     1800000
   ); // 30 minutes
   setTimeout(
-    () => client.channels.cache.get(process.env.UPDATE).send("1 minute left."),
+    () => channel.send(`${player1} vs ${player2}: 1 minute left.`),
     2640000
   ); // 44 minutes
 }
 
 // Function to end the game
 function endGame(gameId, challengerWon) {
+  const [challengerId, opponentId] = gameId.split("-");
+  const challengerUser = client.users.cache.get(challengerId);
+  const opponentUser = client.users.cache.get(opponentId);
+
   clearTimeout(gameTimeouts[challengerUser.id]);
   clearTimeout(gameTimeouts[opponentUser.id]);
 
   // Check if the game has been reported by both players
-  // Agian how does this work? Come back to this
   const reportedByPlayer1 = gameState.player1Reported;
   const reportedByPlayer2 = gameState.player2Reported;
 
@@ -239,23 +322,21 @@ function endGame(gameId, challengerWon) {
       loserId = challengerUser.id;
     }
 
-    // Update Elo ratings
     updateElo(winnerId, loserId, false);
-
-    // Update user records
-    // Come back to this, is this correct. Seems like the opponetUser is always the loser
     updateRecords(winnerId, "win");
     updateRecords(loserId, "lose");
     updateLeaderboard();
   } else {
     // Game ends in a draw if not reported by both players
     updateElo(challengerUser.id, opponentUser.id, true);
-
-    // Update user records & leaderboard
     updateRecords(challengerUser.id, "draw");
     updateRecords(opponentUser.id, "draw");
     updateLeaderboard();
   }
+
+  // Reset game state for the next game
+  gameState.player1Reported = false;
+  gameState.player2Reported = false;
 }
 
 // Function to update Records
@@ -280,7 +361,7 @@ function updateRecords(userId, result) {
 // Function to update Elo ratings
 function updateElo(winnerId, loserId, isDraw) {
   // K-factor, adjust as needed
-  const k = 32; 
+  const k = 32;
 
   const winnerElo = userElo[winnerId] || 1200;
   const loserElo = userElo[loserId] || 1200;
