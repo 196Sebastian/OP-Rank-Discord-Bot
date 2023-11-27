@@ -37,7 +37,7 @@ async function processCommand(message) {
     await challengeCommand(message);
   } else if (command === "/report") {
     // soon add report
-    await reportCommand(message);
+    await reportCommand(message, args);
   }
 }
 
@@ -141,6 +141,79 @@ async function challengeCommand(message) {
   }
 }
 
+// Report command
+async function reportCommand(message, args) {
+  // Check if the opponentUser is the same as the challengerUser
+  const opponentUser = message.mentions.users.first();
+  const result = args[0];
+
+  if (!opponentUser) {
+    message.reply("You need to mention the opponent user.");
+    return;
+  }
+
+  if (opponentUser.id === message.author.id) {
+    message.reply("You cannot report a game against yourself.");
+    return;
+  }
+
+  if (opponentUser.id === message.author.bot) {
+    message.reply("You cannot report a game against bot.");
+    return;
+  }
+
+  // Check if the game exists
+  const gameId = findGameId(message.author.id, opponentUser.id);
+
+  if (!gameId) {
+    message.reply("No ongoing game found with the mentioned opponent.");
+    return;
+  }
+
+  // Confirm the result with the opponent
+  const confirmationEmbed = new MessageEmbed()
+    .setTitle("Result Confirmation")
+    .setDescription(
+      `${opponentUser}, ${message.author} has reported the result as: ${result}. React with ✅ to confirm or ❌ to reject.`
+    );
+
+  const confirmationMessage = await message.channel.send({
+    embeds: [confirmationEmbed],
+  });
+
+  // Add reactions to the confirmation message
+  addReactions(confirmationMessage, ["✅", "❌"]);
+
+  // Add the confirmation event listeners
+  const filter = (reaction, user) =>
+    user.id === opponentUser.id &&
+    (reaction.emoji.name === "✅" || reaction.emoji.name === "❌");
+
+  const collector = confirmationMessage.createReactionCollector({
+    filter,
+    time: 30000, // Set a time limit for confirmation
+  });
+
+  collector.on("collect", (reaction) => {
+    collector.stop(); // Stop collecting reactions once one is collected
+
+    if (reaction.emoji.name === "✅") {
+      // Confirm the result
+      finalizeGame(message, message.author, opponentUser, gameId, result);
+    } else {
+      // Reject the result
+      message.channel.send(`${opponentUser} has rejected the reported result.`);
+    }
+  });
+
+  collector.on("end", (collected, reason) => {
+    if (reason === "time") {
+      // Handle timeout logic
+      message.channel.send("Result confirmation timed out.");
+    }
+  });
+}
+
 // Function to check if a user is in an ongoing game
 function isUserInGame(userId) {
   for (const game of games.values()) {
@@ -156,10 +229,23 @@ function generateGameId() {
   return Math.random().toString(36).substring(7);
 }
 
+// Function to find the ongoing game ID between two users
+function findGameId(userId1, userId2) {
+  for (const [gameId, gameData] of games) {
+    if (
+      (gameData.challenger === userId1 && gameData.opponent === userId2) ||
+      (gameData.challenger === userId2 && gameData.opponent === userId1)
+    ) {
+      return gameId;
+    }
+  }
+  return null;
+}
+
 // Function to start the game
 function startGame(player1, player2, gameId) {
   const gameData = games.get(gameId);
-  console.log(`game started ${player1} ${player2} ${gameId}`)
+  console.log(`game started ${player1} ${player2} ${gameId}`);
 
   if (!gameData) {
     console.error(`Game data not found for game ID: ${gameId}`);
@@ -196,7 +282,7 @@ function startGame(player1, player2, gameId) {
 }
 
 // Function to end the game
-function endGame(player1, player2, gameId, timeout) {
+function endGame(message, player1, player2, gameId, timeout) {
   const gameData = games.get(gameId);
 
   if (!gameData) {
@@ -219,6 +305,35 @@ function endGame(player1, player2, gameId, timeout) {
       `The game between ${player1} and ${player2} has ended.`
     );
   }
+
+  // Perform any additional end game logic here
+
+  // Remove game data from the map
+  games.delete(gameId);
+}
+
+// Function to finalize the game with the reported result
+function finalizeGame(message, reporter, opponentUser, gameId, result) {
+  const gameData = games.get(gameId);
+
+  if (!gameData) {
+    console.error(`Game data not found for game ID: ${gameId}`);
+    return;
+  }
+
+  // Clear all timers
+  for (const timer of gameData.timers) {
+    clearTimeout(timer);
+  }
+
+  // Display the result
+  const resultEmbed = new MessageEmbed()
+    .setTitle("Game Result")
+    .setDescription(
+      `The game between ${reporter} and ${opponentUser} has ended. Result: ${result}`
+    );
+
+  message.channel.send({ embeds: [resultEmbed] });
 
   // Perform any additional end game logic here
 
