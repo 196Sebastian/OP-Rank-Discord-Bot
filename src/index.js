@@ -1,14 +1,33 @@
 require("dotenv").config();
 
-const { Client, MessageEmbed, Intents } = require("discord.js");
+const { Client, EmbedBuilder, GatewayIntentBits } = require("discord.js");
+const initializeDatabase = require("./database");
+
 const client = new Client({
   intents: [
-    Intents.FLAGS.GUILDS,
-    Intents.FLAGS.GUILD_MEMBERS,
-    Intents.FLAGS.GUILD_MESSAGES,
-    Intents.FLAGS.MESSAGE_CONTENT,
-    Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions,
   ],
+});
+
+let db;
+
+async function startBot() {
+  try {
+    db = await initializeDatabase();
+    console.log("Database initialized successfully.");
+    // ... (rest of your bot initialization code)
+  } catch (error) {
+    console.error("Error initializing database:", error);
+  }
+}
+
+client.once("ready", async () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  startBot();
 });
 
 const ranks = {
@@ -36,9 +55,27 @@ async function processCommand(message) {
   if (command === "/challenge") {
     await challengeCommand(message);
   } else if (command === "/report") {
-    // soon add report
     await reportCommand(message, args);
+  } else if (command === "/leaderboard") {
+    await leaderboardCommand(message);
   }
+}
+
+// Function to get user data from the database
+async function getUserData(userId) {
+  const user = await db.get("SELECT * FROM users WHERE id = ?", userId);
+  return user || { id: userId, elo: 1000, wins: 0, losses: 0 };
+}
+
+// Function to update user data in the database
+async function updateUserData(userId, newData) {
+  await db.run(
+    "INSERT OR REPLACE INTO users (id, elo, wins, losses) VALUES (?, ?, ?, ?)",
+    userId,
+    newData.elo || 1000,
+    newData.wins || 0,
+    newData.losses || 0
+  );
 }
 
 // Challenge command
@@ -76,7 +113,7 @@ async function challengeCommand(message) {
   }
 
   // Create a challenge message with reactions
-  const challengeEmbed = new MessageEmbed()
+  const challengeEmbed = new EmbedBuilder()
     .setTitle("Challenge")
     .setDescription(`${message.author} has challenged ${opponent} to a game.`)
     .addFields({
@@ -119,7 +156,7 @@ async function challengeCommand(message) {
 
     if (reaction.emoji.name === "✅" && user.id === opponent.id) {
       // Start the game
-      startGame(message.author, opponent, gameId);
+      startGame(message, message.author, opponent, gameId);
     } else {
       // Decline the challenge
       endGame(message.author, opponent, gameId, false);
@@ -171,7 +208,7 @@ async function reportCommand(message, args) {
   }
 
   // Confirm the result with the opponent
-  const confirmationEmbed = new MessageEmbed()
+  const confirmationEmbed = new EmbedBuilder()
     .setTitle("Result Confirmation")
     .setDescription(
       `${opponentUser}, ${message.author} has reported the result as: ${result}. React with ✅ to confirm or ❌ to reject.`
@@ -214,6 +251,34 @@ async function reportCommand(message, args) {
   });
 }
 
+// Command to display the leaderboard
+async function leaderboardCommand(message) {
+  const leaderboard = await db.all(
+    "SELECT * FROM users ORDER BY elo DESC LIMIT 10"
+  );
+
+  if (!Array.isArray(leaderboard)) {
+    // Handle the case where leaderboard is not an array
+    console.error("Error fetching leaderboard data");
+    return;
+  }
+
+  const leaderboardEmbed = new EmbedBuilder()
+    .setTitle("Leaderboard")
+    .setDescription("Top 10 Players");
+
+  leaderboard.forEach((user, index) => {
+    leaderboardEmbed.addField(
+      `#${index + 1} ${ranks[index + 1] || "Unknown Rank"}`,
+      `${message.guild.members.cache.get(user.id) || user.id} - Elo: ${
+        user.elo
+      } | Wins: ${user.wins} | Losses: ${user.losses}`
+    );
+  });
+
+  message.channel.send({ embeds: [leaderboardEmbed] });
+}
+
 // Function to check if a user is in an ongoing game
 function isUserInGame(userId) {
   for (const game of games.values()) {
@@ -243,7 +308,7 @@ function findGameId(userId1, userId2) {
 }
 
 // Function to start the game
-function startGame(player1, player2, gameId) {
+async function startGame(message, player1, player2, gameId) {
   const gameData = games.get(gameId);
   console.log(`game started ${player1} ${player2} ${gameId}`);
 
@@ -279,10 +344,19 @@ function startGame(player1, player2, gameId) {
 
   // Store timers in gameData to manage later
   gameData.timers = [gameTimer, thirtyMinuteWarning, fortyFiveMinuteWarning];
+
+  // Update game state in the database
+  await db.run(
+    "INSERT OR REPLACE INTO games (id, challenger_id, opponent_id, state) VALUES (?, ?, ?, ?)",
+    gameId,
+    player1.id,
+    player2.id,
+    "started"
+  );
 }
 
 // Function to end the game
-function endGame(message, player1, player2, gameId, timeout) {
+async function endGame(message, player1, player2, gameId, timeout) {
   const gameData = games.get(gameId);
 
   if (!gameData) {
@@ -295,6 +369,31 @@ function endGame(message, player1, player2, gameId, timeout) {
     clearTimeout(timer);
   }
 
+  // Display the result
+  const resultEmbed = new EmbedBuilder()
+    .setTitle("Game Result")
+    .setDescription(
+      `The game between ${player1} (${gameData.elo1} Elo) and ${player2} (${gameData.elo2} Elo) has ended. Result: ${gameData.result}`
+    );
+
+  message.channel.send({ embeds: [resultEmbed] });
+
+  // Update user records and Elo
+  const eloChange = calculateEloChange(gameData.elo1, gameData.elo2);
+
+  const winnerData = await getUserData(gameData.winner);
+  const loserData = await getUserData(gameData.loser);
+
+  await updateUserData(gameData.winner, {
+    elo: eloChange.winner,
+    wins: winnerData.wins + 1,
+  });
+
+  await updateUserData(gameData.loser, {
+    elo: eloChange.loser,
+    losses: loserData.losses + 1,
+  });
+
   // Handle different end conditions
   if (timeout) {
     message.channel.send(
@@ -305,11 +404,19 @@ function endGame(message, player1, player2, gameId, timeout) {
       `The game between ${player1} and ${player2} has ended.`
     );
   }
-
-  // Perform any additional end game logic here
-
   // Remove game data from the map
   games.delete(gameId);
+
+  // Update game state in the database
+  await db.run(
+    "INSERT OR REPLACE INTO games (id, challenger_id, opponent_id, state, winner_id, loser_id) VALUES (?, ?, ?, ?, ?, ?)",
+    gameId,
+    player1.id,
+    player2.id,
+    "ended",
+    gameData.winner,
+    gameData.loser
+  );
 }
 
 // Function to finalize the game with the reported result
@@ -327,7 +434,7 @@ function finalizeGame(message, reporter, opponentUser, gameId, result) {
   }
 
   // Display the result
-  const resultEmbed = new MessageEmbed()
+  const resultEmbed = new EmbedBuilder()
     .setTitle("Game Result")
     .setDescription(
       `The game between ${reporter} and ${opponentUser} has ended. Result: ${result}`
@@ -351,6 +458,21 @@ async function addReactions(message, reactions) {
     console.error(`Error reacting to the message: ${error}`);
     return;
   }
+}
+
+// Function to calculate Elo change
+function calculateEloChange(winnerElo, loserElo) {
+  const kFactor = 32; // Adjust this value as needed
+
+  const expectedWinnerScore = 1 / (1 + 10 ** ((loserElo - winnerElo) / 400));
+  const expectedLoserScore = 1 / (1 + 10 ** ((winnerElo - loserElo) / 400));
+
+  const winnerNewElo = Math.round(
+    winnerElo + kFactor * (1 - expectedWinnerScore)
+  );
+  const loserNewElo = Math.round(loserElo + kFactor * (0 - expectedLoserScore));
+
+  return { winner: winnerNewElo, loser: loserNewElo };
 }
 
 client.login(process.env.BOT_TOKEN);
