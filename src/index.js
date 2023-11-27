@@ -69,16 +69,20 @@ async function challengeCommand(message) {
     return;
   }
 
-  // Create a challenge message
+  // Create a challenge message with reactions
   const challengeEmbed = new MessageEmbed()
     .setTitle("Challenge")
-    .setDescription(`${message.author} has challenged ${opponent} to a game.`);
+    .setDescription(`${message.author} has challenged ${opponent} to a game.`)
+    .addFields({
+      name: "Instructions",
+      value: `${opponent}, react with ✅ to accept or ❌ to decline.`,
+    });
 
   const challengeMessage = await message.channel.send({
     embeds: [challengeEmbed],
   });
 
-  // React to the challenge message
+  // Add reactions to the challenge message
   addReactions(challengeMessage, ["✅", "❌"]);
 
   // Add the game data to the map
@@ -86,7 +90,7 @@ async function challengeCommand(message) {
   games.set(gameId, {
     challenger: message.author.id,
     opponent: opponent.id,
-    state: "pending", // or use an enum for states (e.g., { PENDING: 'pending', ACCEPTED: 'accepted', DECLINED: 'declined' })
+    state: "pending",
     timeout: setTimeout(() => {
       // Handle timeout logic
       games.delete(gameId);
@@ -94,51 +98,36 @@ async function challengeCommand(message) {
     }, 45000),
   });
 
-  // Notify the opponent about the challenge
-  const opponentUser = message.guild.members.cache.get(opponent.id);
-  if (opponentUser) {
-    const acceptEmbed = new MessageEmbed()
-      .setTitle("Challenge Accepted")
-      .setDescription(
-        `${opponentUser}, ${message.author} has challenged you. React with ✅ to accept or ❌ to decline.`
-      );
+  // Add the accept/decline event listeners
+  const filter = (reaction, user) =>
+    user.id === opponent.id &&
+    (reaction.emoji.name === "✅" || reaction.emoji.name === "❌");
 
-    const acceptMessage = await message.channel.send({ embeds: [acceptEmbed] });
+  const collector = challengeMessage.createReactionCollector({
+    filter,
+    time: 45000,
+  });
 
-    // Add reactions to the accept message
-    addReactions(acceptMessage, ["✅", "❌"]);
+  collector.on("collect", (reaction, user) => {
+    collector.stop(); // Stop collecting reactions once one is collected
 
-    // Add the accept/decline event listeners
-    const filter = (reaction, user) =>
-      user.id === opponent.id &&
-      (reaction.emoji.name === "✅" || reaction.emoji.name === "❌");
+    if (reaction.emoji.name === "✅" && user.id === opponent.id) {
+      // Start the game
+      startGame(message.author, opponent, gameId);
+    } else {
+      // Decline the challenge
+      endGame(message.author, opponent, gameId, false);
+      message.channel.send(`${opponent} has declined the challenge.`);
+    }
+  });
 
-    const collector = acceptMessage.createReactionCollector({
-      filter,
-      time: 45000,
-    });
-
-    collector.on("collect", (reaction, user) => {
-      collector.stop(); // Stop collecting reactions once one is collected
-
-      if (reaction.emoji.name === "✅" && user.id === opponent.id) {
-        // Start the game
-        startGame(message.author, opponent, gameId);
-      } else {
-        // Decline the challenge
-        endGame(message.author, opponent, gameId, false);
-        message.channel.send(`${opponentUser} has declined the challenge.`);
-      }
-    });
-
-    collector.on("end", (collected, reason) => {
-      if (reason === "time") {
-        // Handle timeout logic
-        endGame(message.author, opponent, gameId, true);
-        message.channel.send("Challenge timed out.");
-      }
-    });
-  }
+  collector.on("end", (collected, reason) => {
+    if (reason === "time") {
+      // Handle timeout logic
+      endGame(message.author, opponent, gameId, true);
+      message.channel.send("Challenge timed out.");
+    }
+  });
 }
 
 // Report command
