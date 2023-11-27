@@ -1,59 +1,5 @@
 
 
-// // Function to find a user by username in the guild
-// function findUserByUsername(guild, username) {
-//   // Check if username is defined
-//   if (!username) {
-//     console.error("Error: Username is undefined or null.");
-//     return null;
-//   }
-
-//   // Convert the username to lowercase for case-insensitive comparison
-//   const lowerCaseUsername = username.toLowerCase();
-
-//   const member = guild.members.cache.find((member) => {
-//     const user = member.user;
-
-//     // Check if user is defined and the username matches (case-insensitive)
-//     const usernameMatches =
-//       user && user.username.toLowerCase() === lowerCaseUsername;
-
-//     // Log the username, lowercased username, and whether it matches
-//     console.log(`Username: ${user ? user.username : "undefined"}`);
-//     console.log(`Lowercased Username: ${lowerCaseUsername}`);
-//     console.log(`Username Matches: ${usernameMatches}`);
-
-//     return usernameMatches;
-//   });
-
-//   return member ? member.user : null;
-// }
-
-// // Function to check if a user is in a game
-// function isUserInGame(user) {
-//   for (const [, { player1, player2 }] of eloSystem.gameStates.entries()) {
-//     if (
-//       (player1 && player1.id === user.id && !player1.bot) ||
-//       (player2 && player2.id === user.id && !player2.bot)
-//     ) {
-//       return true;
-//     }
-//   }
-//   return false;
-// }
-
-// // Function to find the game ID by user ID
-// function findGameIdByUserId(userId) {
-//   for (const [gameId, { player1, player2 }] of eloSystem.gameStates.entries()) {
-//     if (
-//       (player1 && player1.id === userId && !player1.bot) ||
-//       (player2 && player2.id === userId && !player2.bot)
-//     ) {
-//       return gameId;
-//     }
-//   }
-//   return null;
-// }
 
 
 

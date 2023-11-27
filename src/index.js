@@ -43,6 +43,12 @@ async function processCommand(message) {
 
 // Challenge command
 async function challengeCommand(message) {
+  const allowedChannelId = process.env.CHALLENGE; // Replace with the actual channel ID
+  if (message.channel.id !== allowedChannelId) {
+    message.reply("This command can only be used in the specified channel.");
+    return;
+  }
+
   // Check if the user mentioned another user
   const opponent = message.mentions.users.first();
 
@@ -132,6 +138,11 @@ async function challengeCommand(message) {
 
 // Report command
 async function reportCommand(message, args) {
+  const allowedChannelId = process.env.REPORT; // Replace with the actual channel ID
+  if (message.channel.id !== allowedChannelId) {
+    message.reply("This command can only be used in the specified channel.");
+    return;
+  }
   // Check if the opponentUser is the same as the challengerUser
   const opponentUser = message.mentions.users.first();
   const result = args[0];
