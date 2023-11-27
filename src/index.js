@@ -1,7 +1,8 @@
 require("dotenv").config();
 
 const { Client, EmbedBuilder, GatewayIntentBits } = require("discord.js");
-const initializeDatabase = require("./database");
+const { open } = require("sqlite");
+const sqlite3 = require("sqlite3");
 
 const client = new Client({
   intents: [
@@ -15,11 +16,17 @@ const client = new Client({
 
 let db;
 
+async function initializeDatabase() {
+  return open({
+    filename: "./database.sqlite",
+    driver: sqlite3.Database,
+  });
+}
+
 async function startBot() {
   try {
     db = await initializeDatabase();
-    console.log("Database initialized successfully.");
-    // ... (rest of your bot initialization code)
+    console.log("Database connected successfully.");
   } catch (error) {
     console.error("Error initializing database:", error);
   }
@@ -253,30 +260,36 @@ async function reportCommand(message, args) {
 
 // Command to display the leaderboard
 async function leaderboardCommand(message) {
-  const leaderboard = await db.all(
-    "SELECT * FROM users ORDER BY elo DESC LIMIT 10"
-  );
-
-  if (!Array.isArray(leaderboard)) {
-    // Handle the case where leaderboard is not an array
-    console.error("Error fetching leaderboard data");
-    return;
-  }
-
-  const leaderboardEmbed = new EmbedBuilder()
-    .setTitle("Leaderboard")
-    .setDescription("Top 10 Players");
-
-  leaderboard.forEach((user, index) => {
-    leaderboardEmbed.addField(
-      `#${index + 1} ${ranks[index + 1] || "Unknown Rank"}`,
-      `${message.guild.members.cache.get(user.id) || user.id} - Elo: ${
-        user.elo
-      } | Wins: ${user.wins} | Losses: ${user.losses}`
+  try {
+    const leaderboard = await db.all(
+      "SELECT * FROM users ORDER BY elo DESC LIMIT 10"
     );
-  });
 
-  message.channel.send({ embeds: [leaderboardEmbed] });
+    console.log("Leaderboard data:", leaderboard);
+
+    if (!Array.isArray(leaderboard)) {
+      // Handle the case where leaderboard is not an array
+      console.error("Error: Leaderboard data is not an array");
+      return;
+    }
+
+    const leaderboardEmbed = new EmbedBuilder()
+      .setTitle("Leaderboard")
+      .setDescription("Top 10 Players");
+
+    leaderboard.forEach((user, index) => {
+      leaderboardEmbed.addField(
+        `#${index + 1} ${ranks[index + 1] || "Unknown Rank"}`,
+        `${message.guild.members.cache.get(user.id) || user.id} - Elo: ${
+          user.elo
+        } | Wins: ${user.wins} | Losses: ${user.losses}`
+      );
+    });
+
+    message.channel.send({ embeds: [leaderboardEmbed] });
+  } catch (error) {
+    console.error("Error fetching leaderboard data:", error);
+  }
 }
 
 // Function to check if a user is in an ongoing game
