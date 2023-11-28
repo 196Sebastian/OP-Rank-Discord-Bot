@@ -70,11 +70,16 @@ async function processCommand(message) {
 // Function to get user data from the database
 async function getUserData(userId) {
   const user = await db.get("SELECT * FROM users WHERE id = ?", userId);
+  console.log("Retrieved User Data:", user);
+
   return user || { id: userId, elo: 1000, wins: 0, losses: 0 };
 }
 
 // Function to update user data in the database
 async function updateUserData(userId, newData) {
+  // Ensure that newData has elo property
+  newData.elo = newData.elo || 1000;
+
   await db.run(
     "INSERT OR REPLACE INTO users (id, elo, wins, losses) VALUES (?, ?, ?, ?)",
     userId,
@@ -82,6 +87,7 @@ async function updateUserData(userId, newData) {
     newData.wins || 0,
     newData.losses || 0
   );
+  console.log("Updated User Data for User ID:", userId, "New Data:", newData);
 }
 
 // Challenge command
@@ -145,6 +151,12 @@ async function challengeCommand(message) {
       games.delete(gameId);
       message.channel.send("Challenge timed out.");
     }, 45000),
+    winner: null,
+    loser: null,
+    elo: {
+      [message.author.id]: 1000,
+      [opponent.id]: 1000,
+    },
   });
 
   // Add the accept/decline event listeners
@@ -165,7 +177,7 @@ async function challengeCommand(message) {
       startGame(message, message.author, opponent, gameId);
     } else {
       // Decline the challenge
-      endGame(message.author, opponent, gameId, false);
+      endGame(message, message.author, opponent, gameId, false);
       message.channel.send(`${opponent} has declined the challenge.`);
     }
   });
@@ -173,7 +185,7 @@ async function challengeCommand(message) {
   collector.on("end", (collected, reason) => {
     if (reason === "time") {
       // Handle timeout logic
-      endGame(message.author, opponent, gameId, true);
+      endGame(message, message.author, opponent, gameId, true);
       message.channel.send("Challenge timed out.");
     }
   });
@@ -319,7 +331,7 @@ function findGameId(userId1, userId2) {
 
 // Function to start the game
 async function startGame(message, player1, player2, gameId) {
-  const gameData = games.get(gameId);
+  let gameData = games.get(gameId);
   console.log(`game started ${player1.id} ${player2.id} ${gameId}`);
 
   if (!gameData) {
@@ -341,7 +353,7 @@ async function startGame(message, player1, player2, gameId) {
   // Set the game timer to 55 minutes
   const gameTimer = setTimeout(() => {
     // Handle game end logic
-    endGame(player1, player2, gameId, true);
+    endGame(message, player1, player2, gameId, true);
   }, 55 * 60 * 1000); // 55 minutes
 
   // Set warnings at the 30 and 45 minute marks
@@ -360,13 +372,22 @@ async function startGame(message, player1, player2, gameId) {
   // Store timers in gameData to manage later
   gameData.timers = [gameTimer, thirtyMinuteWarning, fortyFiveMinuteWarning];
 
+  // Add winner and loser properties to gameData
+  gameData.winner = null;
+  gameData.loser = null;
+  
   // Update game state in the database
   await db.run(
-    "INSERT OR REPLACE INTO games (id, challenger_id, opponent_id, state) VALUES (?, ?, ?, ?)",
+    "INSERT OR REPLACE INTO games (id, challenger_id, opponent_id, state, elo_challenger, elo_opponent, winner_id, loser_id, result) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     gameId,
     player1.id,
     player2.id,
-    "started"
+    "started",
+    gameData.elo[player1.id] || 1000,
+    gameData.elo[player2.id] || 1000,
+    gameData.winner,
+    gameData.loser,
+    gameData.result || "unknown"
   );
 }
 
@@ -379,6 +400,11 @@ async function endGame(message, player1, player2, gameId, timeout) {
     return;
   }
 
+  // Intitialize elo property if not present
+  if (!gameData.elo) {
+    gameData.elo = {};
+  }
+
   // Clear all timers
   for (const timer of gameData.timers) {
     clearTimeout(timer);
@@ -388,7 +414,11 @@ async function endGame(message, player1, player2, gameId, timeout) {
   const resultEmbed = new EmbedBuilder()
     .setTitle("Game Result")
     .setDescription(
-      `The game between ${player1} (${gameData.elo1} Elo) and ${player2} (${gameData.elo2} Elo) has ended. Result: ${gameData.result}`
+      `The game between ${player1} (${
+        gameData.elo[player1.id]
+      } Elo) and ${player2} (${
+        gameData.elo[player2.id]
+      } Elo) has ended. Result: ${gameData.result}`
     );
 
   // Update user records and Elo
@@ -397,12 +427,14 @@ async function endGame(message, player1, player2, gameId, timeout) {
     gameData.elo[gameData.loser]
   );
 
-  message.channel.send({ embeds: [resultEmbed] });
+  console.log("Winner ID:", gameData.winner);
+  console.log("Loser ID:", gameData.loser);
 
-  console.log("Winner Elo Change:", eloChange.winner);
-  console.log("Winner Elo Change:", eloChange.challenger);
-  console.log("Loser Elo Change:", eloChange.loser);
-  console.log("Loser Elo Change:", eloChange.opponent);
+  const winnerData = await getUserData(gameData.winner);
+  const loserData = await getUserData(gameData.loser);
+
+  console.log("Retrieved Winner Data:", winnerData);
+  console.log("Retrieved Loser Data:", loserData);
 
   // Check if eloChange.winner and eloChange.loser are objects
   if (
@@ -417,15 +449,27 @@ async function endGame(message, player1, player2, gameId, timeout) {
     console.error("eloChange.winner or eloChange.loser is not an object.");
   }
 
-  const winnerData = await getUserData(gameData.winner);
-  const loserData = await getUserData(gameData.loser);
-
   await updateUserData(gameData.winner, {
     elo: eloChange.winner,
     wins: winnerData.wins + 1,
   });
 
   await updateUserData(gameData.loser, {
+    elo: eloChange.loser,
+    losses: loserData.losses + 1,
+  });
+
+  console.log(
+    "Updated User Data for Winner ID:",
+    gameData.winner,
+    "New Data:",
+    {
+      elo: eloChange.winner,
+      wins: winnerData.wins + 1,
+    }
+  );
+
+  console.log("Updated User Data for Loser ID:", gameData.loser, "New Data:", {
     elo: eloChange.loser,
     losses: loserData.losses + 1,
   });
@@ -440,18 +484,22 @@ async function endGame(message, player1, player2, gameId, timeout) {
       `The game between ${player1} and ${player2} has ended.`
     );
   }
+
+  message.channel.send({ embeds: [resultEmbed] });
+
   // Remove game data from the map
   games.delete(gameId);
 
   // Update game state in the database
   await db.run(
-    "INSERT OR REPLACE INTO games (id, challenger_id, opponent_id, state, winner_id, loser_id) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT OR REPLACE INTO games (id, challenger_id, opponent_id, state, winner_id, loser_id, result) VALUES (?, ?, ?, ?, ?, ?, ?)",
     gameId,
-    player1.id,
-    player2.id,
+    gameData.challenger,
+    gameData.opponent,
     "ended",
     gameData.winner,
-    gameData.loser
+    gameData.loser,
+    gameData.result
   );
 }
 
@@ -501,7 +549,7 @@ async function finalizeGame(message, reporter, opponentUser, gameId, result) {
     )
     .addFields({
       name: "Elo Changes",
-      value: `${reporter}: ${eloChange.winner}, ${opponentUser}: ${eloChange.loser}`,
+      value: `${reporter}: ${eloChange.winner}\n${opponentUser}: ${eloChange.loser}`,
     });
 
   message.channel.send({ embeds: [resultEmbed] });
@@ -511,14 +559,16 @@ async function finalizeGame(message, reporter, opponentUser, gameId, result) {
 
   // Update game state in the database
   await db.run(
-    "INSERT OR REPLACE INTO games (id, challenger_id, opponent_id, state, winner_id, loser_id, result) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    "INSERT OR REPLACE INTO games (id, challenger_id, opponent_id, state, winner_id, loser_id, result, elo_challenger, elo_opponent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     gameId,
     gameData.challenger,
     gameData.opponent,
     "ended",
     gameData.winner,
     gameData.loser,
-    result
+    gameData.result,
+    gameData.elo[gameData.challenger] || 1000,
+    gameData.elo[gameData.opponent] || 1000
   );
 }
 
@@ -537,6 +587,16 @@ async function addReactions(message, reactions) {
 // Function to calculate Elo change
 function calculateEloChange(winnerElo, loserElo) {
   const kFactor = 32; // Adjust this value as needed
+
+  // Log the values for debugging
+  console.log("Winner Elo:", winnerElo);
+  console.log("Loser Elo:", loserElo);
+
+  // Ensure that winnerElo and loserElo are valid numbers
+  if (isNaN(winnerElo) || isNaN(loserElo)) {
+    console.error("Invalid Elo values for calculation.");
+    return { winner: 0, loser: 0 }; // Return default values or handle accordingly
+  }
 
   const expectedWinnerScore = 1 / (1 + 10 ** ((loserElo - winnerElo) / 400));
   const expectedLoserScore = 1 / (1 + 10 ** ((winnerElo - loserElo) / 400));
