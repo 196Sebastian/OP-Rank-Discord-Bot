@@ -14,8 +14,7 @@ async function initializeDatabase() {
         id TEXT PRIMARY KEY,
         elo INTEGER,
         wins INTEGER,
-        losses INTEGER,
-        elo_challenger INTEGER
+        losses INTEGER
       );
 
       CREATE TABLE IF NOT EXISTS games (

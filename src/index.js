@@ -69,10 +69,16 @@ async function processCommand(message) {
 
 // Function to get user data from the database
 async function getUserData(userId) {
-  const user = await db.get("SELECT * FROM users WHERE id = ?", userId);
-  console.log("Retrieved User Data:", user);
+  try {
+    const user = await db.get("SELECT * FROM users WHERE id = ?", userId);
+    console.log("Retrieved User Data:", user);
 
-  return user || { id: userId, elo: 1000, wins: 0, losses: 0 };
+    // Provide default values if user data is undefined
+    return user || { id: userId, elo: 1000, wins: 0, losses: 0 };
+  } catch (error) {
+    console.error("Error retrieving user data:", error);
+    return { id: userId, elo: 1000, wins: 0, losses: 0 };
+  }
 }
 
 // Function to update user data in the database
@@ -375,7 +381,7 @@ async function startGame(message, player1, player2, gameId) {
   // Add winner and loser properties to gameData
   gameData.winner = null;
   gameData.loser = null;
-  
+
   // Update game state in the database
   await db.run(
     "INSERT OR REPLACE INTO games (id, challenger_id, opponent_id, state, elo_challenger, elo_opponent, winner_id, loser_id, result) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -383,12 +389,23 @@ async function startGame(message, player1, player2, gameId) {
     player1.id,
     player2.id,
     "started",
-    gameData.elo[player1.id] || 1000,
-    gameData.elo[player2.id] || 1000,
+    gameData.elo[player1.id],
+    gameData.elo[player2.id],
     gameData.winner,
     gameData.loser,
     gameData.result || "unknown"
   );
+
+  // Assign winner and loser based on Elo
+  gameData.winner =
+    gameData.elo[player1.id] > gameData.elo[player2.id]
+      ? player1.id
+      : player2.id;
+
+  gameData.loser =
+    gameData.elo[player1.id] < gameData.elo[player2.id]
+      ? player1.id
+      : player2.id;
 }
 
 // Function to end the game
@@ -410,6 +427,23 @@ async function endGame(message, player1, player2, gameId, timeout) {
     clearTimeout(timer);
   }
 
+  // Calculate Elo changes
+  const eloChange = calculateEloChange(
+    gameData.elo[gameData.challenger],
+    gameData.elo[gameData.opponent]
+  );
+
+  // Update winner and loser properties
+  gameData.winner =
+    gameData.elo[gameData.challenger] > gameData.elo[gameData.opponent]
+      ? gameData.challenger
+      : gameData.opponent;
+
+  gameData.loser =
+    gameData.elo[gameData.challenger] < gameData.elo[gameData.opponent]
+      ? gameData.challenger
+      : gameData.opponent;
+
   // Display the result
   const resultEmbed = new EmbedBuilder()
     .setTitle("Game Result")
@@ -420,12 +454,6 @@ async function endGame(message, player1, player2, gameId, timeout) {
         gameData.elo[player2.id]
       } Elo) has ended. Result: ${gameData.result}`
     );
-
-  // Update user records and Elo
-  const eloChange = calculateEloChange(
-    gameData.elo[gameData.winner],
-    gameData.elo[gameData.loser]
-  );
 
   console.log("Winner ID:", gameData.winner);
   console.log("Loser ID:", gameData.loser);
@@ -519,6 +547,10 @@ async function finalizeGame(message, reporter, opponentUser, gameId, result) {
 
   //Update game result in gameData
   gameData.result = result;
+
+  // Determine winner and loser based on player reports
+  gameData.winner = reporter.id;
+  gameData.loser = opponentUser.id;
 
   // Calculate Elo changes
   const eloChange = calculateEloChange(
