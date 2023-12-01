@@ -63,7 +63,7 @@ async function processCommand(message) {
   } else if (command === "/report") {
     await reportCommand(message, args);
   } else if (command === "/leaderboard") {
-    await leaderboardCommand(message);
+    await leaderboardCommand(message, args);
   }
 }
 
@@ -71,14 +71,16 @@ async function processCommand(message) {
 async function getUserData(userId) {
   try {
     const user = await db.get("SELECT * FROM users WHERE id = ?", userId);
-    console.log("SQL Query:", "SELECT * FROM users WHERE id =", userId);
-    console.log("Retrieved User Data:", user);
 
-    // Provide default values if user data is undefined
-    return user || { id: userId, elo: 1000, wins: 0, losses: 0 };
+    if (!user || user.id === null) {
+      console.log(`User with ID ${userId} not found or has null ID.`);
+      return null;
+    }
+
+    return user;
   } catch (error) {
     console.error("Error retrieving user data:", error);
-    return { id: userId, elo: 1000, wins: 0, losses: 0 };
+    return null;
   }
 }
 
@@ -277,34 +279,66 @@ async function reportCommand(message, args) {
 }
 
 // Command to display the leaderboard
-async function leaderboardCommand(message) {
+async function leaderboardCommand(message, args) {
   try {
-    const leaderboard = await db.all(
-      "SELECT * FROM users ORDER BY elo DESC LIMIT 10"
+    // Get the leaderboard data from the database
+    const leaderboardData = await db.all(
+      "SELECT * FROM users WHERE id IS NOT NULL ORDER BY elo DESC"
     );
 
-    console.log("Leaderboard data:", leaderboard);
-
-    if (!Array.isArray(leaderboard)) {
-      // Handle the case where leaderboard is not an array
-      console.error("Error: Leaderboard data is not an array");
-      return;
-    }
-
-    const leaderboardEmbed = new EmbedBuilder()
-      .setTitle("Leaderboard")
-      .setDescription("Top 10 Players");
-
-    leaderboard.forEach((user, index) => {
-      leaderboardEmbed.addFields({
-        name: `#${index + 1} ${ranks[index + 1] || "Unknown Rank"}`,
-        value: `${user.id} - Elo: ${user.elo} | Wins: ${user.wins} | Losses: ${user.losses}`,
-      });
+    // Group users by rank
+    const groupedByRank = {};
+    leaderboardData.forEach((user) => {
+      const rank = getRankByElo(user.elo);
+      if (!groupedByRank[rank]) {
+        groupedByRank[rank] = [];
+      }
+      groupedByRank[rank].push(user);
     });
 
+    // Create the embed
+    const leaderboardEmbed = new EmbedBuilder()
+      .setTitle("Leaderboard")
+      .setDescription("Top Players");
+
+    // Display the leaderboard with usernames and separate sections for each rank
+    for (const [rank, users] of Object.entries(groupedByRank)) {
+      const rankTitle = `Top 5 Players - ${rank}`;
+      leaderboardEmbed.addFields({ name: rankTitle, value: "\u200B" });
+
+      for (
+        let userIndex = 0;
+        userIndex < 5 && userIndex < users.length;
+        userIndex++
+      ) {
+        const user = users[userIndex];
+        try {
+          const userObject = await client.users.fetch(user.id);
+          const username = userObject.username;
+          leaderboardEmbed.addFields(
+            {
+              name: `${userIndex + 1}. ${username}`,
+              value: "\u200b",
+            },
+            { name: "Elo:", value: user.elo.toString(), inline: true },
+            { name: "Wins:", value: user.wins.toString(), inline: true },
+            { name: "Losses:", value: user.losses.toString(), inline: true }
+          );
+        } catch (error) {
+          console.error("Error fetching user:", error);
+          leaderboardEmbed.addFields({
+            name: `${userIndex + 1}. User ID: ${user.id}`,
+            value: "Error fetching username",
+          });
+        }
+      }
+    }
+
+    // Send the embed to the channel
     message.channel.send({ embeds: [leaderboardEmbed] });
   } catch (error) {
     console.error("Error fetching leaderboard data:", error);
+    message.reply("An error occurred while fetching leaderboard data.");
   }
 }
 
@@ -667,4 +701,20 @@ function calculateEloChange(winnerElo, loserElo) {
 
   return { winner: winnerNewElo, loser: loserNewElo };
 }
+
+// Function to get rank based on Elo
+function getRankByElo(elo) {
+  if (elo >= 1200) {
+    return "Pirate King";
+  } else if (elo >= 1100) {
+    return "Yonko";
+  } else if (elo >= 1000) {
+    return "Seven Warlords of the Sea";
+  } else if (elo >= 900) {
+    return "Supernova";
+  } else {
+    return "East Blue Pirates";
+  }
+}
+
 client.login(process.env.BOT_TOKEN);
