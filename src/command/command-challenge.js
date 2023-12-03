@@ -116,6 +116,7 @@ async function challengeCommand(
         db,
         getUserData
       );
+      message.channel.send(`${opponent} has accepted the match.`);
     } else {
       // Decline the challenge
       endGame(
@@ -128,7 +129,7 @@ async function challengeCommand(
         games,
         getUserData
       );
-      message.channel.send(`${opponent} has declined the challenge.`);
+      message.channel.send(`${opponent} has declined the match.`);
     }
   });
 

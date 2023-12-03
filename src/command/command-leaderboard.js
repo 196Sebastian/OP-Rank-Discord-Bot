@@ -52,12 +52,12 @@ async function leaderboardCommand(db, client, message, args, getRankByElo) {
               inline: true,
             },
             {
-              name: "✅ ",
+              name: "✅",
               value: `Wins: ${user.wins.toString()}`,
               inline: true,
             },
             {
-              name: "❌ ",
+              name: "❌",
               value: `Losses: ${user.losses.toString()}`,
               inline: true,
             }
