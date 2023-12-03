@@ -1,3 +1,4 @@
+require("dotenv").config();
 const { v4: uuidv4 } = require("uuid");
 const { EmbedBuilder } = require("discord.js");
 
@@ -45,11 +46,13 @@ async function challengeCommand(
 
   // Create a challenge message with reactions
   const challengeEmbed = new EmbedBuilder()
-    .setTitle("Challenge")
-    .setDescription(`${message.author} has challenged ${opponent} to a game.`)
+    .setColor("#880808")
+    .setThumbnail(process.env.FIGHT_LUFFY)
+    .setTitle("⚔️ CHALLENGE ⚔️")
+    .setDescription(`${message.author} has challenged ${opponent} to a match.`)
     .addFields({
       name: "Instructions",
-      value: `${opponent}, react with ✅ to accept or ❌ to decline.`,
+      value: "React with ✅ to accept or ❌ to decline.",
     });
 
   const challengeMessage = await message.channel.send({
@@ -104,10 +107,27 @@ async function challengeCommand(
 
     if (reaction.emoji.name === "✅" && user.id === opponent.id) {
       // Start the game
-      startGame(message, message.author, opponent, gameId, games, db, getUserData);
+      startGame(
+        message,
+        message.author,
+        opponent,
+        gameId,
+        games,
+        db,
+        getUserData
+      );
     } else {
       // Decline the challenge
-      endGame(db, message, message.author, opponent, gameId, false, getUserData);
+      endGame(
+        db,
+        message,
+        message.author,
+        opponent,
+        gameId,
+        false,
+        games,
+        getUserData
+      );
       message.channel.send(`${opponent} has declined the challenge.`);
     }
   });

@@ -19,13 +19,14 @@ async function leaderboardCommand(db, client, message, args, getRankByElo) {
 
     // Create the embed
     const leaderboardEmbed = new EmbedBuilder()
-      .setTitle("Leaderboard")
-      .setDescription("Top Players");
-
+      .setTitle("☠️💰 Wanted Posters 💰☠️")
+      .setDescription("Top 5 pirates for each rank.")
+      .setColor("#e8b923")
+      .setThumbnail(process.env.WANTED)
+      .addFields({ name: "\u200B", value: " " });
     // Display the leaderboard with usernames and separate sections for each rank
     for (const [rank, users] of Object.entries(groupedByRank)) {
-      const rankTitle = `Top 5 Players - ${rank}`;
-      leaderboardEmbed.addFields({ name: rankTitle, value: "\u200B" });
+      const rankTitle = `『 ${rank} 』`;
 
       for (
         let userIndex = 0;
@@ -38,12 +39,28 @@ async function leaderboardCommand(db, client, message, args, getRankByElo) {
           const username = userObject.username;
           leaderboardEmbed.addFields(
             {
-              name: `${userIndex + 1}. ${username}`,
-              value: "\u200b",
+              name: rankTitle,
+              value: "\u200B",
             },
-            { name: "Elo:", value: user.elo.toString(), inline: true },
-            { name: "Wins:", value: user.wins.toString(), inline: true },
-            { name: "Losses:", value: user.losses.toString(), inline: true }
+            {
+              name: "🏴‍☠️",
+              value: `${userIndex + 1}. ${username}`,
+            },
+            {
+              name: "🪙",
+              value: `Ꞗ ${user.elo.toString()}`,
+              inline: true,
+            },
+            {
+              name: "✅ ",
+              value: `Wins: ${user.wins.toString()}`,
+              inline: true,
+            },
+            {
+              name: "❌ ",
+              value: `Losses: ${user.losses.toString()}`,
+              inline: true,
+            }
           );
         } catch (error) {
           console.error("Error fetching user:", error);
