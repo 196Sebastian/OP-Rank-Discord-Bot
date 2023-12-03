@@ -1,5 +1,5 @@
-const { initializeDatabase } = require("./database");
-const { processCommand } = require("./commands");
+const { initializeDatabase } = require("../utils/database");
+const { processCommand } = require("../command/commands");
 
 let db;
 
@@ -11,7 +11,6 @@ async function startBot(client, games) {
       console.error("Error initializing database.");
       return;
     }
-    console.log(games);
     console.log("Database connected successfully.");
 
     client.on("messageCreate", (message) => {

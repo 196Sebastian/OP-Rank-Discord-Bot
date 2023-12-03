@@ -1,7 +1,7 @@
 require("dotenv").config();
 
 const { Client, GatewayIntentBits } = require("discord.js");
-const { startBot } = require("./bot");
+const { startBot } = require("./utils/bot");
 
 const client = new Client({
   intents: [

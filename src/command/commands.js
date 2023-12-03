@@ -1,15 +1,18 @@
 const { challengeCommand } = require("./command-challenge");
 const { reportCommand } = require("./command-report");
 const { leaderboardCommand } = require("./command-leaderboard");
-const { startGame, endGame, finalizeGame } = require("./game-logic");
-const { findGameId, getUserData, updateUserData } = require("./database");
-const { getRankByElo } = require("./elo-utils");
+const { startGame, endGame, finalizeGame } = require("../game-logic");
+const {
+  findGameId,
+  getUserData,
+  updateUserData,
+} = require("../utils/database");
+const { getRankByElo } = require("../utils/elo-utils");
 
 function processCommand(db, client, message, games) {
   const [command, ...args] = message.content.split(" ");
 
   if (command === "/challenge") {
-    console.log(games);
     challengeCommand(
       db,
       client,

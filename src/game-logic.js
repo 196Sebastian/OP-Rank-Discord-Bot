@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require("discord.js");
-const { calculateEloChange } = require("./elo-utils");
+const { calculateEloChange } = require("./utils/elo-utils");
 
 // Function to start the game
 async function startGame(
