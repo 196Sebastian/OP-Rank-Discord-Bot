@@ -37,6 +37,54 @@ async function initializeDatabase() {
   }
 }
 
+// Function to get user data from the database
+async function getUserData(userId, db) {
+  try {
+    const user = await db.get("SELECT * FROM users WHERE id = ?", userId);
+
+    if (!user || user.id === null) {
+      console.log(`User with ID ${userId} not found or has null ID.`);
+      return null;
+    }
+
+    return user;
+  } catch (error) {
+    console.error("Error retrieving user data:", error);
+    return null;
+  }
+}
+
+// Function to update user data in the database
+async function updateUserData(userId, newData, db) {
+  // Ensure that newData has elo property
+  newData.elo = newData.elo || 1000;
+
+  await db.run(
+    "INSERT OR REPLACE INTO users (id, elo, wins, losses) VALUES (?, ?, ?, ?)",
+    userId,
+    newData.elo || 1000,
+    newData.wins || 0,
+    newData.losses || 0
+  );
+  console.log("Updated User Data for User ID:", userId, "New Data:", newData);
+}
+
+// Function to find the ongoing game ID between two users
+function findGameId(userId1, userId2, games) {
+  for (const [gameId, gameData] of games) {
+    if (
+      (gameData.challenger === userId1 && gameData.opponent === userId2) ||
+      (gameData.challenger === userId2 && gameData.opponent === userId1)
+    ) {
+      return gameId;
+    }
+  }
+  return null;
+}
+
 module.exports = {
   initializeDatabase,
+  getUserData,
+  updateUserData,
+  findGameId,
 };
