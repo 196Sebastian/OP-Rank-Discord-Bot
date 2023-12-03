@@ -3,7 +3,7 @@ const { processCommand } = require("../command/commands");
 
 let db;
 
-async function startBot(client, games) {
+async function startBot(client) {
   try {
     db = await initializeDatabase();
 
@@ -16,7 +16,7 @@ async function startBot(client, games) {
     client.on("messageCreate", (message) => {
       if (message.author.bot) return;
 
-      processCommand(db, client, message, games);
+      processCommand(db, client, message);
     });
   } catch (error) {
     console.error("Error initializing database:", error);

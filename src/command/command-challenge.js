@@ -69,7 +69,6 @@ async function challengeCommand(
     opponent: opponent.id,
     state: "pending",
     timeout: setTimeout(() => {
-      // Handle timeout logic
       games.delete(gameId);
       message.channel.send("Challenge timed out.");
     }, 45000),
@@ -97,49 +96,44 @@ async function challengeCommand(
     user.id === opponent.id &&
     (reaction.emoji.name === "✅" || reaction.emoji.name === "❌");
 
-  const collector = challengeMessage.createReactionCollector({
-    filter,
-    time: 45000,
-  });
-
-  collector.on("collect", (reaction, user) => {
-    collector.stop(); // Stop collecting reactions once one is collected
-
-    if (reaction.emoji.name === "✅" && user.id === opponent.id) {
-      // Start the game
-      startGame(
-        message,
-        message.author,
-        opponent,
-        gameId,
-        games,
-        db,
-        getUserData
-      );
-      message.channel.send(`${opponent} has accepted the match.`);
-    } else {
-      // Decline the challenge
-      endGame(
-        db,
-        message,
-        message.author,
-        opponent,
-        gameId,
-        false,
-        games,
-        getUserData
-      );
-      message.channel.send(`${opponent} has declined the match.`);
-    }
-  });
-
-  collector.on("end", (collected, reason) => {
-    if (reason === "time") {
-      // Handle timeout logic
-      endGame(db, message, message.author, opponent, gameId, true, getUserData);
-      message.channel.send("Challenge timed out.");
-    }
-  });
+  challengeMessage
+    .awaitReactions({
+      filter,
+      max: 1,
+      time: 45000,
+      errors: ["time"],
+    })
+    .then((collected) => {
+      if (reaction.emoji.name === "✅" && user.id === opponent.id) {
+        // Start the game
+        startGame(
+          message,
+          message.author,
+          opponent,
+          gameId,
+          games,
+          db,
+          getUserData
+        );
+        message.channel.send(`${opponent} has accepted the match.`);
+      } else {
+        // Decline the challenge
+        endGame(
+          db,
+          message,
+          message.author,
+          opponent,
+          gameId,
+          false,
+          games,
+          getUserData
+        );
+        message.channel.send(`${opponent} has declined the match.`);
+      }
+    })
+    .catch((error) => {
+      console.error("Error collecting reactions:", error);
+    });
 }
 
 // Function to generate a unique game ID

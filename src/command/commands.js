@@ -9,7 +9,10 @@ const {
 } = require("../utils/database");
 const { getRankByElo } = require("../utils/elo-utils");
 
-function processCommand(db, client, message, games) {
+// Map to store ongoing game data
+const games = new Map();
+
+function processCommand(db, client, message) {
   const [command, ...args] = message.content.split(" ");
 
   if (command === "/challenge") {
@@ -23,6 +26,7 @@ function processCommand(db, client, message, games) {
       startGame,
       endGame
     );
+    console.log(games)
   } else if (command === "/report") {
     reportCommand(
       db,

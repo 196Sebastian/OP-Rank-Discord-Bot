@@ -12,12 +12,10 @@ const client = new Client({
     GatewayIntentBits.GuildMessageReactions,
   ],
 });
-// Map to store ongoing game data
-const games = new Map();
 
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
-  startBot(client, games);
+  startBot(client);
 });
 
 client.login(process.env.BOT_TOKEN);
