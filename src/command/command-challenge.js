@@ -39,6 +39,12 @@ async function challengeCommand(
     return;
   }
 
+  // Check if the opponent is in an ongoing game
+  if (isUserInGame(opponent.id, games)) {
+    message.reply("The opponent is already in a game.");
+    return;
+  }
+
   // Create a challenge message with reactions
   const challengeEmbed = new EmbedBuilder()
     .setColor("#880808")
@@ -56,13 +62,6 @@ async function challengeCommand(
 
   // Add reactions to the challenge message
   addReactions(challengeMessage, ["✅", "❌"]);
-
-  // Create an error embed for timeout
-  const errorEmbed = new EmbedBuilder()
-    .setColor("#FF0000")
-    .setTitle("Error Collecting Reactions")
-    .setDescription("Challenge timed out.")
-    .setTimestamp();
 
   // Add the game data to the map
   const gameId = generateGameId();
