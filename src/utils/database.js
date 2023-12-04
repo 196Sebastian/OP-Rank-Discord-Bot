@@ -59,12 +59,14 @@ async function updateUserData(userId, newData, db) {
   // Ensure that newData has elo property
   newData.elo = newData.elo || 1000;
 
+  const { elo, wins, losses } = newData;
+
   await db.run(
     "INSERT OR REPLACE INTO users (id, elo, wins, losses) VALUES (?, ?, ?, ?)",
     userId,
-    newData.elo || 1000,
-    newData.wins || 0,
-    newData.losses || 0
+    elo || 1000,
+    wins || 0,
+    losses || 0
   );
   console.log("Updated User Data for User ID:", userId, "New Data:", newData);
 }

@@ -1,3 +1,4 @@
+require("dotenv").config();
 const { EmbedBuilder } = require("discord.js");
 
 async function reportCommand(
@@ -18,8 +19,6 @@ async function reportCommand(
   }
 
   const allowedChannelId = process.env.REPORT;
-  console.log("message.channel.id:", message.channel.id);
-
   if (message.channel.id !== allowedChannelId) {
     message.reply("This command can only be used in the specified channel.");
     return;
@@ -53,6 +52,7 @@ async function reportCommand(
   // Confirm the result with the opponent
   const confirmationEmbed = new EmbedBuilder()
     .setTitle("Result Confirmation")
+    .setThumbnail(process.env.REPORT_IMAGE)
     .setDescription(
       `${opponentUser}, ${message.author} has reported the result as: ${result}. React with ✅ to confirm or ❌ to reject.`
     );

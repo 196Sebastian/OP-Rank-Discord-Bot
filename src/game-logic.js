@@ -19,6 +19,16 @@ async function startGame(
     return;
   }
 
+  // Ensure winner and loser IDs are valid
+  if (!gameData.winner || !gameData.loser) {
+    console.error(
+      "Invalid winner or loser ID:",
+      gameData.winner,
+      gameData.loser
+    );
+    return;
+  }
+
   // Initialize elo property if not present
   if (!gameData.elo) {
     gameData.elo = {};
@@ -52,17 +62,9 @@ async function startGame(
   // Store timers in gameData to manage later
   gameData.timers = [gameTimer, thirtyMinuteWarning, fortyFiveMinuteWarning];
 
-  // Add winner and loser properties to gameData
-  gameData.winner = null;
-  gameData.loser = null;
-
   // Retrieve current Elo values from the database or assign default values for first-time users
-  const eloPlayer1 =
-    (await db.get("SELECT elo FROM users WHERE id = ?", player1.id))?.elo ||
-    1000;
-  const eloPlayer2 =
-    (await db.get("SELECT elo FROM users WHERE id = ?", player2.id))?.elo ||
-    1000;
+  const eloPlayer1 = (await getUserData(player1.id, db))?.elo || 1000;
+  const eloPlayer2 = (await getUserData(player2.id, db))?.elo || 1000;
 
   // Initialize Elo values for players
   gameData.elo[player1.id] = eloPlayer1;
@@ -118,14 +120,16 @@ async function endGame(
   }
 
   // Clear all timers
-  for (const timer of gameData.timers) {
-    clearTimeout(timer);
+  if (Array.isArray(gameData.timers)) {
+    for (const timer of gameData.timers) {
+      clearTimeout(timer);
+    }
   }
 
   // Calculate Elo changes
   const eloChange = calculateEloChange(
-    gameData.elo[gameData.winner],
-    gameData.elo[gameData.loser]
+    gameData.elo[gameData.winner] || 1000,
+    gameData.elo[gameData.loser] || 1000
   );
 
   // Update Elo ratings for the winner and loser
@@ -141,9 +145,9 @@ async function endGame(
     .setTitle("Game Result")
     .setDescription(
       `The game between ${player1} (${
-        gameData.elo[player1.id]
+        gameData.elo[player1.id] || 1000
       } Elo) and ${player2} (${
-        gameData.elo[player2.id]
+        gameData.elo[player2.id] || 1000
       } Elo) has ended. Result: ${gameData.result}`
     );
 
@@ -156,17 +160,19 @@ async function endGame(
   console.log("Retrieved Winner Data:", winnerData);
   console.log("Retrieved Loser Data:", loserData);
 
-  // Check if eloChange.winner and eloChange.loser are objects
+  // Check if winnerData and loserData are valid objects
   if (
-    typeof eloChange.winner === "object" &&
-    typeof eloChange.loser === "object"
+    !winnerData ||
+    typeof winnerData !== "object" ||
+    !("wins" in winnerData)
   ) {
-    resultEmbed.addFields([
-      { name: "Winner Elo Change", value: eloChange.winner },
-      { name: "Loser Elo Change", value: eloChange.loser },
-    ]);
-  } else {
-    console.error("eloChange.winner or eloChange.loser is not an object.");
+    console.error(`Invalid or missing data for winner ID: ${gameData.winner}`);
+    return;
+  }
+
+  if (!loserData || typeof loserData !== "object" || !("losses" in loserData)) {
+    console.error(`Invalid or missing data for loser ID: ${gameData.loser}`);
+    return;
   }
 
   // Update user records and Elo

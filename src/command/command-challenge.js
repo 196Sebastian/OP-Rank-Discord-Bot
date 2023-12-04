@@ -12,6 +12,7 @@ async function challengeCommand(
   startGame,
   endGame
 ) {
+  console.log("Challenge command initiated."); // Add this line
   const allowedChannelId = process.env.CHALLENGE;
   if (message.channel.id !== allowedChannelId) {
     message.reply("This command can only be used in the specified channel.");
@@ -35,12 +36,6 @@ async function challengeCommand(
   // Check if the opponent is a bot
   if (opponent.bot) {
     message.reply("You cannot challenge a bot.");
-    return;
-  }
-
-  // Check if the opponent is in an ongoing game
-  if (isUserInGame(opponent.id, games)) {
-    message.reply("The opponent is currently in a match.");
     return;
   }
 
@@ -81,59 +76,103 @@ async function challengeCommand(
   });
 
   console.log(`Game started ${message.author.id} ${opponent.id} ${gameId}`);
-
-  // Add this additional logging and error checking
-  if (games.has(gameId)) {
-    console.log(
-      `Updated Elo values:\n${JSON.stringify(games.get(gameId).elo, null, 2)}`
-    );
-  } else {
-    console.error(`Game not found in games map for ID: ${gameId}`);
-  }
+  console.log(
+    `Updated Elo values:\n${JSON.stringify(games.get(gameId).elo, null, 2)}`
+  );
 
   // Add the accept/decline event listeners
   const filter = (reaction, user) =>
+    !user.bot &&
     user.id === opponent.id &&
     (reaction.emoji.name === "✅" || reaction.emoji.name === "❌");
 
-  challengeMessage
-    .awaitReactions({
+  try {
+    const collected = await challengeMessage.awaitReactions({
       filter,
       max: 1,
       time: 45000,
       errors: ["time"],
-    })
-    .then((collected) => {
-      if (reaction.emoji.name === "✅" && user.id === opponent.id) {
-        // Start the game
-        startGame(
-          message,
-          message.author,
-          opponent,
-          gameId,
-          games,
-          db,
-          getUserData
-        );
-        message.channel.send(`${opponent} has accepted the match.`);
-      } else {
-        // Decline the challenge
-        endGame(
-          db,
-          message,
-          message.author,
-          opponent,
-          gameId,
-          false,
-          games,
-          getUserData
-        );
-        message.channel.send(`${opponent} has declined the match.`);
-      }
-    })
-    .catch((error) => {
-      console.error("Error collecting reactions:", error);
     });
+
+    const reaction = collected.first();
+    const user = reaction.users.cache.filter((u) => !u.bot).first();
+
+    // Inside the challengeCommand function, after the line const user = reaction.users.cache.first();
+    console.log(`Reaction: ${reaction.emoji.name} by User: ${user.username}`);
+    console.log(`Reaction details:`, reaction);
+
+    if (!reaction || !user) {
+      message.channel.send("Challenge timed out.");
+      games.delete(gameId);
+      return;
+    }
+
+    if (!user.bot && reaction.emoji.name === "✅" && user.id === opponent.id) {
+      console.log("Challenge accepted block reached.");
+      // Challenge accepted
+      let gameData = games.get(gameId);
+
+      if (!gameData || gameData.state !== "pending") {
+        message.channel.send("Challenge is no longer valid.");
+        console.error("Challenge is no longer valid. Game data:", gameData);
+        return;
+      }
+
+      // Clear the timeout
+      clearTimeout(gameData.timeout);
+
+      // Mark the game as accepted
+      gameData.state = "accepted";
+      games.set(gameId, gameData);
+
+      console.log("Game marked as accepted.");
+      console.log(
+        "Updated Elo values:\n",
+        JSON.stringify(games.get(gameId).elo, null, 2)
+      );
+
+      // Update the challenge message
+      const acceptedEmbed = new EmbedBuilder()
+        .setColor("#00FF00")
+        .setThumbnail(process.env.ACCEPTED_ICON)
+        .setTitle("⚔️ CHALLENGE ACCEPTED ⚔️")
+        .setDescription(
+          `${opponent} has accepted the challenge from ${message.author}.`
+        );
+      challengeMessage.edit({ embeds: [acceptedEmbed] });
+
+      // Call startGame function here
+      console.log("Calling startGame function.");
+      startGame(
+        message,
+        message.author,
+        opponent,
+        gameId,
+        games,
+        db,
+        getUserData
+      );
+    } else {
+      // Challenge declined
+      message.channel.send(`${opponent} has declined the match.`);
+      endGame(
+        db,
+        message,
+        message.author,
+        opponent,
+        gameId,
+        false,
+        games,
+        getUserData
+      );
+    }
+  } catch (error) {
+    console.error("Error collecting reactions:", error);
+    // Handle errors as needed
+    message.channel.send(
+      "Error collecting reactions. Challenge may have timed out."
+    );
+  }
 }
 
 // Function to generate a unique game ID
@@ -144,7 +183,10 @@ function generateGameId() {
 // Function to check if a user is in an ongoing game
 function isUserInGame(userId, games) {
   for (const game of games.values()) {
-    if (game.challenger === userId || game.opponent === userId) {
+    if (
+      (game.state === "pending" || game.state === "accepted") &&
+      (game.challenger === userId || game.opponent === userId)
+    ) {
       return true;
     }
   }
