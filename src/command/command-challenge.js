@@ -57,16 +57,20 @@ async function challengeCommand(
   // Add reactions to the challenge message
   addReactions(challengeMessage, ["✅", "❌"]);
 
+  // Create an error embed for timeout
+  const errorEmbed = new EmbedBuilder()
+    .setColor("#FF0000")
+    .setTitle("Error Collecting Reactions")
+    .setDescription("Challenge timed out.")
+    .setTimestamp();
+
   // Add the game data to the map
   const gameId = generateGameId();
   games.set(gameId, {
     challenger: message.author.id,
     opponent: opponent.id,
     state: "pending",
-    timeout: setTimeout(() => {
-      games.delete(gameId);
-      message.channel.send("Challenge timed out.");
-    }, 45000),
+    timeout: null,
     winner: null,
     loser: null,
     elo: {
@@ -86,6 +90,8 @@ async function challengeCommand(
     user.id === opponent.id &&
     (reaction.emoji.name === "✅" || reaction.emoji.name === "❌");
 
+  let gameData;
+
   try {
     const collected = await challengeMessage.awaitReactions({
       filter,
@@ -101,16 +107,8 @@ async function challengeCommand(
     console.log(`Reaction: ${reaction.emoji.name} by User: ${user.username}`);
     console.log(`Reaction details:`, reaction);
 
-    if (!reaction || !user) {
-      message.channel.send("Challenge timed out.");
-      games.delete(gameId);
-      return;
-    }
-
     if (!user.bot && reaction.emoji.name === "✅" && user.id === opponent.id) {
-      console.log("Challenge accepted block reached.");
-      // Challenge accepted
-      let gameData = games.get(gameId);
+      gameData = games.get(gameId);
 
       if (!gameData || gameData.state !== "pending") {
         message.channel.send("Challenge is no longer valid.");
@@ -119,7 +117,7 @@ async function challengeCommand(
       }
 
       // Clear the timeout
-      clearTimeout(gameData.timeout);
+      clearTimeout(games.get(gameId).timeout);
 
       // Mark the game as accepted
       gameData.state = "accepted";
@@ -153,8 +151,10 @@ async function challengeCommand(
         getUserData
       );
     } else {
+      // Clear the timeout using the saved timeout ID
+      clearTimeout(games.get(gameId).timeout);
+
       // Challenge declined
-      message.channel.send(`${opponent} has declined the match.`);
       endGame(
         db,
         message,
@@ -165,13 +165,38 @@ async function challengeCommand(
         games,
         getUserData
       );
+
+      // Update the challenge message
+      const declinedEmbed = new EmbedBuilder()
+        .setColor("#FF0000")
+        .setThumbnail(process.env.DECLINED_ICON)
+        .setTitle("⚔️ CHALLENGE DECLINED ⚔️")
+        .setDescription(
+          `${opponent} has declined the challenge from ${message.author}.`
+        );
+      challengeMessage.edit({ embeds: [declinedEmbed] });
     }
   } catch (error) {
-    console.error("Error collecting reactions:", error);
-    // Handle errors as needed
-    message.channel.send(
-      "Error collecting reactions. Challenge may have timed out."
-    );
+    if (error instanceof Map) {
+      // Challenge timed out
+      gameData = games.get(gameId);
+
+      // Delete the initial challenge message
+      challengeMessage.delete().catch(console.error);
+
+      // Create an error embed for timeout
+      const errorEmbed = new EmbedBuilder()
+        .setColor("#CC5500")
+        .setTitle("⚠️ Error Collecting Reactions ⚠️")
+        .setDescription("Challenge timed out.")
+        .setThumbnail(process.env.ERROR_ICON)
+        .setTimestamp();
+
+      // Send the error embed
+      message.channel.send({ embeds: [errorEmbed] });
+    } else {
+      // ... (you can add additional error handling here if needed)
+    }
   }
 }
 
