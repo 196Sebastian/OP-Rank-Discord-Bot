@@ -40,6 +40,9 @@ async function startGame(
   // Set the game state to "started"
   gameData.state = "started";
 
+  // Initialize timers as an empty array
+  gameData.timers = [];
+
   // Set the game timer to 55 minutes
   const gameTimer = setTimeout(() => {
     // Handle game end logic
@@ -60,7 +63,7 @@ async function startGame(
   }, 45 * 60 * 1000); // 45 minutes
 
   // Store timers in gameData to manage later
-  gameData.timers = [gameTimer, thirtyMinuteWarning, fortyFiveMinuteWarning];
+  gameData.timers.push(gameTimer, thirtyMinuteWarning, fortyFiveMinuteWarning);
 
   // Retrieve current Elo values from the database or assign default values for first-time users
   const eloPlayer1 = (await getUserData(player1.id, db))?.elo || 1000;
@@ -260,8 +263,10 @@ async function finalizeGame(
   }
 
   // Clear all timers
-  for (const timer of gameData.timers) {
-    clearTimeout(timer);
+  if (Array.isArray(gameData.timers)) {
+    for (const timer of gameData.timers) {
+      clearTimeout(timer);
+    }
   }
 
   //Update game result in gameData
@@ -271,7 +276,7 @@ async function finalizeGame(
   if (result.toLowerCase() === "win") {
     gameData.winner = reporter.id;
     gameData.loser = opponentUser.id;
-  } else if (result.toLowerCase() === "lose") {
+  } else if (result.toLowerCase() === "lost") {
     gameData.winner = opponentUser.id;
     gameData.loser = reporter.id;
   } else {

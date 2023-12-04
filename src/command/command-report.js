@@ -49,6 +49,13 @@ async function reportCommand(
     return;
   }
 
+  // Check if the result is valid
+  const validResults = ["win", "lost"];
+  if (!validResults.includes(result.toLowerCase())) {
+    message.reply("Invalid result. Please use 'win' or 'lost'.");
+    return;
+  }
+
   // Confirm the result with the opponent
   const confirmationEmbed = new EmbedBuilder()
     .setTitle("Result Confirmation")
