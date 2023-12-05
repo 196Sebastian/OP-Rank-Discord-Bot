@@ -65,35 +65,8 @@ async function startGame(
   // Store timers in gameData to manage later
   gameData.timers.push(gameTimer, thirtyMinuteWarning, fortyFiveMinuteWarning);
 
-  // Retrieve current Elo values from the database or assign default values for first-time users
-  const eloPlayer1 = (await getUserData(player1.id, db))?.elo || 1000;
-  const eloPlayer2 = (await getUserData(player2.id, db))?.elo || 1000;
-
-  // Initialize Elo values for players
-  gameData.elo[player1.id] = eloPlayer1;
-  gameData.elo[player2.id] = eloPlayer2;
-
   // Log initial Elo values
   console.log("Initial Elo values:");
-  console.log(`${player1.username}: ${gameData.elo[player1.id]}`);
-  console.log(`${player2.username}: ${gameData.elo[player2.id]}`);
-
-  // Update game state in the database
-  await db.run(
-    "INSERT OR REPLACE INTO games (id, challenger_id, opponent_id, state, elo_challenger, elo_opponent, winner_id, loser_id, result) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    gameId,
-    player1.id,
-    player2.id,
-    "started",
-    gameData.elo[player1.id],
-    gameData.elo[player2.id],
-    gameData.winner,
-    gameData.loser,
-    gameData.result || "unknown"
-  );
-
-  // Log updated Elo values
-  console.log("Updated Elo values:");
   console.log(`${player1.username}: ${gameData.elo[player1.id]}`);
   console.log(`${player2.username}: ${gameData.elo[player2.id]}`);
 }
@@ -227,20 +200,6 @@ async function endGame(
 
   // Remove game data from the map
   games.delete(gameId);
-
-  // Update game state in the database
-  await db.run(
-    "INSERT OR REPLACE INTO games (id, challenger_id, opponent_id, state, winner_id, loser_id, result, elo_challenger, elo_opponent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    gameId,
-    gameData.challenger,
-    gameData.opponent,
-    "ended",
-    gameData.winner,
-    gameData.loser,
-    gameData.result,
-    gameData.elo[gameData.challenger] || 1000,
-    gameData.elo[gameData.opponent] || 1000
-  );
 }
 
 // Function to finalize the game with the reported result

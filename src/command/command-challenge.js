@@ -12,7 +12,7 @@ async function challengeCommand(
   startGame,
   endGame
 ) {
-  console.log("Challenge command initiated."); // Add this line
+  console.log("Challenge command initiated.");
   const allowedChannelId = process.env.CHALLENGE;
   if (message.channel.id !== allowedChannelId) {
     message.reply("This command can only be used in the specified channel.");
@@ -40,7 +40,9 @@ async function challengeCommand(
   }
 
   // Check if the opponent is in an ongoing game
-  if (isUserInGame(opponent.id, games)) {
+  const isOpponentInGame = await isUserInGame(opponent.id, games, getUserData);
+
+  if (isOpponentInGame) {
     message.reply("The opponent is already in a game.");
     return;
   }
@@ -63,6 +65,10 @@ async function challengeCommand(
   // Add reactions to the challenge message
   addReactions(challengeMessage, ["✅", "❌"]);
 
+  // Fetch current Elo values for the challenger and opponent from the database
+  const challengerEloData = await getUserData(message.author.id, db);
+  const opponentEloData = await getUserData(opponent.id, db);
+
   // Add the game data to the map
   const gameId = generateGameId();
   games.set(gameId, {
@@ -73,12 +79,14 @@ async function challengeCommand(
     winner: null,
     loser: null,
     elo: {
-      [message.author.id]: 1000,
-      [opponent.id]: 1000,
+      [message.author.id]: challengerEloData.elo || 1000,
+      [opponent.id]: opponentEloData.elo || 1000,
     },
   });
 
-  console.log(`Game started ${message.author.id} ${opponent.id} ${gameId}`);
+  console.log(
+    `Game pending between: ${message.author.id} ${opponent.id} ${gameId}`
+  );
   console.log(
     `Updated Elo values:\n${JSON.stringify(games.get(gameId).elo, null, 2)}`
   );
@@ -194,7 +202,7 @@ async function challengeCommand(
       // Send the error embed
       message.channel.send({ embeds: [errorEmbed] });
     } else {
-      // ... (you can add additional error handling here if needed)
+      // ... (add additional error handling here if needed)
     }
   }
 }
@@ -204,14 +212,26 @@ function generateGameId() {
   return uuidv4();
 }
 
-// Function to check if a user is in an ongoing game
-function isUserInGame(userId, games) {
+async function isUserInGame(userId, games, getUserData) {
   for (const game of games.values()) {
+    const challengerData = await getUserData(game.challenger);
+    const opponentData = await getUserData(game.opponent);
+
+    // Check if the user data is available and has a valid ID
     if (
-      (game.state === "pending" || game.state === "accepted") &&
-      (game.challenger === userId || game.opponent === userId)
+      challengerData &&
+      opponentData &&
+      challengerData.id &&
+      opponentData.id
     ) {
-      return true;
+      if (
+        (game.state === "pending" || game.state === "accepted") &&
+        (challengerData.id === userId || opponentData.id === userId)
+      ) {
+        return true;
+      }
+    } else {
+      console.error(`Invalid user data for game ID ${game.id}`);
     }
   }
   return false;

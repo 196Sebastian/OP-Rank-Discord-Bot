@@ -37,12 +37,11 @@ async function initializeDatabase() {
   }
 }
 
-// Function to get user data from the database
 async function getUserData(userId, db) {
   try {
     const user = await db.get("SELECT * FROM users WHERE id = ?", userId);
 
-    if (!user || user.id === null) {
+    if (!user || !user.id) {
       console.log(`User with ID ${userId} not found or has null ID.`);
       return null;
     }
