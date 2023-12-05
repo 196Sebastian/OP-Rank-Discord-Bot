@@ -164,18 +164,6 @@ async function challengeCommand(
       // Challenge declined
       games.delete(gameId);
 
-      // Challenge declined
-      // endGame(
-      //   db,
-      //   message,
-      //   message.author,
-      //   opponent,
-      //   gameId,
-      //   false,
-      //   games,
-      //   getUserData
-      // );
-
       // Update the challenge message
       const declinedEmbed = new EmbedBuilder()
         .setColor("#FF0000")
