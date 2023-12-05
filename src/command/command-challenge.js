@@ -162,16 +162,19 @@ async function challengeCommand(
       clearTimeout(games.get(gameId).timeout);
 
       // Challenge declined
-      endGame(
-        db,
-        message,
-        message.author,
-        opponent,
-        gameId,
-        false,
-        games,
-        getUserData
-      );
+      games.delete(gameId);
+
+      // Challenge declined
+      // endGame(
+      //   db,
+      //   message,
+      //   message.author,
+      //   opponent,
+      //   gameId,
+      //   false,
+      //   games,
+      //   getUserData
+      // );
 
       // Update the challenge message
       const declinedEmbed = new EmbedBuilder()
@@ -184,26 +187,22 @@ async function challengeCommand(
       challengeMessage.edit({ embeds: [declinedEmbed] });
     }
   } catch (error) {
-    if (error instanceof Map) {
-      // Challenge timed out
-      gameData = games.get(gameId);
+    // Challenge declined
+    games.delete(gameId);
 
-      // Delete the initial challenge message
-      challengeMessage.delete().catch(console.error);
+    // Delete the initial challenge message
+    challengeMessage.delete().catch(console.error);
 
-      // Create an error embed for timeout
-      const errorEmbed = new EmbedBuilder()
-        .setColor("#CC5500")
-        .setTitle("⚠️ Error Collecting Reactions ⚠️")
-        .setDescription("Challenge timed out.")
-        .setThumbnail(process.env.ERROR_ICON)
-        .setTimestamp();
+    // Create an error embed for timeout
+    const errorEmbed = new EmbedBuilder()
+      .setColor("#CC5500")
+      .setTitle("⚠️ Error Collecting Reactions ⚠️")
+      .setDescription("Challenge timed out.")
+      .setThumbnail(process.env.ERROR_ICON)
+      .setTimestamp();
 
-      // Send the error embed
-      message.channel.send({ embeds: [errorEmbed] });
-    } else {
-      // ... (add additional error handling here if needed)
-    }
+    // Send the error embed
+    message.channel.send({ embeds: [errorEmbed] });
   }
 }
 
@@ -214,24 +213,28 @@ function generateGameId() {
 
 async function isUserInGame(userId, games, getUserData) {
   for (const game of games.values()) {
-    const challengerData = await getUserData(game.challenger);
-    const opponentData = await getUserData(game.opponent);
+    try {
+      const challengerData = await getUserData(game.challenger);
+      const opponentData = await getUserData(game.opponent);
 
-    // Check if the user data is available and has a valid ID
-    if (
-      challengerData &&
-      opponentData &&
-      challengerData.id &&
-      opponentData.id
-    ) {
+      // Check if the user data is available and has a valid ID
       if (
-        (game.state === "pending" || game.state === "accepted") &&
-        (challengerData.id === userId || opponentData.id === userId)
+        challengerData &&
+        opponentData &&
+        challengerData.id &&
+        opponentData.id
       ) {
-        return true;
+        if (
+          (game.state === "pending" || game.state === "accepted") &&
+          (challengerData.id === userId || opponentData.id === userId)
+        ) {
+          return true;
+        }
+      } else {
+        console.error(`Invalid user data for game ID ${game.id}`);
       }
-    } else {
-      console.error(`Invalid user data for game ID ${game.id}`);
+    } catch (error) {
+      console.error(`Error checking user data for game ID ${game.id}:`, error);
     }
   }
   return false;

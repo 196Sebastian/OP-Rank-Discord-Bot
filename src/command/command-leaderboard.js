@@ -20,7 +20,7 @@ async function leaderboardCommand(db, client, message, args, getRankByElo) {
     // Create the embed
     const leaderboardEmbed = new EmbedBuilder()
       .setTitle("☠️💰 Wanted Posters 💰☠️")
-      .setDescription("Top 5 pirates for each rank.")
+      .setDescription("Top 5 wanted poster for each rank.")
       .setColor("#e8b923")
       .setThumbnail(process.env.WANTED)
       .addFields({ name: "\u200B", value: " " });
