@@ -95,6 +95,7 @@ async function challengeCommand(
   const filter = (reaction, user) =>
     !user.bot &&
     user.id === opponent.id &&
+    user.id !== message.author.id && // Exclude the author from being able to react
     (reaction.emoji.name === "✅" || reaction.emoji.name === "❌");
 
   let gameData;
@@ -175,6 +176,7 @@ async function challengeCommand(
       challengeMessage.edit({ embeds: [declinedEmbed] });
     }
   } catch (error) {
+    console.log(`ERROR: ${error}`);
     // Challenge declined
     games.delete(gameId);
 

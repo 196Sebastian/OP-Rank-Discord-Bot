@@ -55,19 +55,22 @@ async function getUserData(userId, db) {
 
 // Function to update user data in the database
 async function updateUserData(userId, newData, db) {
-  // Ensure that newData has elo property
-  newData.elo = newData.elo || 1000;
+  try {
+    const { elo = 1000, wins = 0, losses = 0 } = newData;
 
-  const { elo, wins, losses } = newData;
+    await db.run(
+      "INSERT OR REPLACE INTO users (id, elo, wins, losses) VALUES (?, ?, ?, ?)",
+      userId,
+      elo,
+      wins,
+      losses
+    );
 
-  await db.run(
-    "INSERT OR REPLACE INTO users (id, elo, wins, losses) VALUES (?, ?, ?, ?)",
-    userId,
-    elo || 1000,
-    wins || 0,
-    losses || 0
-  );
-  console.log("Updated User Data for User ID:", userId, "New Data:", newData);
+    console.log("Updated User Data for User ID:", userId, "New Data:", newData);
+  } catch (error) {
+    console.error("Error updating user data:", error);
+    throw error;
+  }
 }
 
 // Function to find the ongoing game ID between two users
