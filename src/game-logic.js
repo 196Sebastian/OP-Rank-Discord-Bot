@@ -13,9 +13,9 @@ async function startGame(
   getUserData,
   updateUserData
 ) {
-  let gameData = games.get(gameId);
   console.log(`game started ${player1.id} ${player2.id} ${gameId}`);
 
+  let gameData = games.get(gameId);
   if (!gameData) {
     console.error(`Game data not found for game ID: ${gameId}`);
     return;

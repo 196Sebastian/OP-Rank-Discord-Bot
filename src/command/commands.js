@@ -1,7 +1,7 @@
 const { challengeCommand } = require("./command-challenge");
 const { reportCommand } = require("./command-report");
 const { leaderboardCommand } = require("./command-leaderboard");
-const { startGame, endGame, finalizeGame } = require("../game-logic");
+const { startGame, finalizeGame } = require("../game-logic");
 const {
   findGameId,
   getUserData,
@@ -13,34 +13,45 @@ const { getRankByElo } = require("../utils/elo-utils");
 const games = new Map();
 
 function processCommand(db, client, message) {
-  const [command, ...args] = message.content.split(" ");
+  try {
+    const [command, ...args] = message.content.split(" ");
 
-  if (command === "/challenge") {
-    challengeCommand(
-      db,
-      client,
-      message,
-      games,
-      getUserData,
-      addReactions,
-      startGame,
-      updateUserData
-    );
-  } else if (command === "/report") {
-    reportCommand(
-      db,
-      client,
-      message,
-      args,
-      games,
-      addReactions,
-      findGameId,
-      finalizeGame,
-      getUserData,
-      updateUserData
-    );
-  } else if (command === "/leaderboard") {
-    leaderboardCommand(db, client, message, args, getRankByElo);
+    if (command === "/challenge") {
+      challengeCommand(
+        client,
+        db,
+        message,
+        games,
+        getUserData,
+        addReactions,
+        startGame,
+        updateUserData
+      );
+    } else if (command === "/report") {
+      reportCommand(
+        db,
+        client,
+        message,
+        args,
+        games,
+        addReactions,
+        findGameId,
+        finalizeGame,
+        getUserData,
+        updateUserData
+      );
+    } else if (command === "/leaderboard") {
+      leaderboardCommand(db, client, message, args, getRankByElo);
+    } else {
+      // Handle unknown command
+      message.reply(
+        "Unknown command. Please use /challenge, /report, or /leaderboard."
+      );
+    }
+  } catch (error) {
+    console.error("Error processing command:", error);
+    // Optionally, send an error message to the channel or handle the error in another way
+    message.reply("An error occurred while processing the command.");
   }
 }
 

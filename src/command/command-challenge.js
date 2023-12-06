@@ -3,8 +3,8 @@ const { v4: uuidv4 } = require("uuid");
 const { EmbedBuilder } = require("discord.js");
 
 async function challengeCommand(
-  db,
   client,
+  db,
   message,
   games,
   getUserData,
@@ -14,7 +14,9 @@ async function challengeCommand(
 ) {
   const allowedChannelId = process.env.CHALLENGE;
   if (message.channel.id !== allowedChannelId) {
-    message.reply("This command can only be used in the specified channel.");
+    message.reply(
+      "Sorry, this command can only be used in the specified channel."
+    );
     return;
   }
 
@@ -22,19 +24,19 @@ async function challengeCommand(
   const opponent = message.mentions.users.first();
 
   if (!opponent) {
-    message.reply("You need to mention a user to challenge.");
+    message.reply("Sorry, you need to mention a user to challenge.");
     return;
   }
 
   // Check if the user is challenging themselves
   if (opponent.id === message.author.id) {
-    message.reply("You cannot challenge yourself.");
+    message.reply("Sorry, you cannot challenge yourself.");
     return;
   }
 
   // Check if the opponent is a bot
   if (opponent.bot) {
-    message.reply("You cannot challenge a bot.");
+    message.reply("Sorry, you cannot challenge a bot.");
     return;
   }
 
@@ -42,7 +44,7 @@ async function challengeCommand(
   const isOpponentInGame = await isUserInGame(opponent.id, games, getUserData);
 
   if (isOpponentInGame) {
-    message.reply("The opponent is already in a game.");
+    message.reply("Sorry, the opponent is already in a game.");
     return;
   }
 
@@ -94,7 +96,7 @@ async function challengeCommand(
   const filter = (reaction, user) =>
     !user.bot &&
     user.id === opponent.id &&
-    user.id !== message.author.id && // Exclude the author from being able to react
+    user.id !== message.author.id &&
     (reaction.emoji.name === "✅" || reaction.emoji.name === "❌");
 
   let gameData;
@@ -110,11 +112,49 @@ async function challengeCommand(
     const reaction = collected.first();
     const user = reaction.users.cache.filter((u) => !u.bot).first();
 
-    // Inside the challengeCommand function, after the line const user = reaction.users.cache.first();
+    // Reaction logs
     console.log(`Reaction: ${reaction.emoji.name} by User: ${user.username}`);
     console.log(`Reaction details:`, reaction);
 
     if (!user.bot && reaction.emoji.name === "✅" && user.id === opponent.id) {
+      // Check if both players are still in the server
+      const guild = client.guilds.cache.get(message.guild.id);
+      const player1InGuild = guild.members.cache.has(message.author.id);
+      const player2InGuild = guild.members.cache.has(opponent.id);
+
+      if (!player1InGuild || !player2InGuild) {
+        // Delete the initial challenge message
+        challengeMessage.delete().catch(console.error);
+
+        // Create an error embed user not found
+        const errorUserNotFoundEmbed = new EmbedBuilder()
+          .setColor("#CC5500")
+          .setTitle("⚠️ Error Collecting Reactions ⚠️")
+          .setThumbnail(process.env.ERROR_ICON)
+          .setTimestamp();
+
+        // One or both players are no longer in the server
+        if (!player1InGuild) {
+          message.channel.send({
+            embeds: [
+              errorUserNotFoundEmbed.setDescription(
+                `${message.author.username} is no longer in the server.`
+              ),
+            ],
+          });
+        }
+        if (!player2InGuild) {
+          message.channel.send({
+            embeds: [
+              errorUserNotFoundEmbed.setDescription(
+                `${opponent.username} is no longer in the server.`
+              ),
+            ],
+          });
+        }
+        return;
+      }
+
       gameData = games.get(gameId);
 
       if (!gameData || gameData.state !== "pending") {
@@ -146,8 +186,7 @@ async function challengeCommand(
         );
       challengeMessage.edit({ embeds: [acceptedEmbed] });
 
-      // Call startGame function here
-      console.log("Calling startGame function.");
+      // Start Game
       startGame(
         message,
         message.author,
@@ -159,7 +198,7 @@ async function challengeCommand(
         updateUserData
       );
     } else {
-      // Clear the timeout using the saved timeout ID
+      // Clear the timeout
       clearTimeout(games.get(gameId).timeout);
 
       // Challenge declined
