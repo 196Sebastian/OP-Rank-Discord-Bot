@@ -10,9 +10,8 @@ async function challengeCommand(
   getUserData,
   addReactions,
   startGame,
-  endGame
+  updateUserData
 ) {
-  console.log("Challenge command initiated.");
   const allowedChannelId = process.env.CHALLENGE;
   if (message.channel.id !== allowedChannelId) {
     message.reply("This command can only be used in the specified channel.");
@@ -156,7 +155,8 @@ async function challengeCommand(
         gameId,
         games,
         db,
-        getUserData
+        getUserData,
+        updateUserData
       );
     } else {
       // Clear the timeout using the saved timeout ID

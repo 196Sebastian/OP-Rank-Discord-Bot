@@ -24,9 +24,8 @@ function processCommand(db, client, message) {
       getUserData,
       addReactions,
       startGame,
-      endGame
+      updateUserData
     );
-    console.log(games)
   } else if (command === "/report") {
     reportCommand(
       db,
