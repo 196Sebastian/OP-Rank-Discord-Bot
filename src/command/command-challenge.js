@@ -129,7 +129,7 @@ async function challengeCommand(
         // Create an error embed user not found
         const errorUserNotFoundEmbed = new EmbedBuilder()
           .setColor("#CC5500")
-          .setTitle("⚠️ Error Collecting Reactions ⚠️")
+          .setTitle("⚠️ Error Findng User ⚠️")
           .setThumbnail(process.env.ERROR_ICON)
           .setTimestamp();
 
@@ -188,6 +188,7 @@ async function challengeCommand(
 
       // Start Game
       startGame(
+        client,
         message,
         message.author,
         opponent,

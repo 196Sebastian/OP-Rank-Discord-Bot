@@ -1,9 +1,11 @@
+require("dotenv").config();
 const { EmbedBuilder } = require("discord.js");
 const { calculateEloChange } = require("./utils/elo-utils");
 const { calculateEloChangeWithPenalty } = require("./utils/elo-utils");
 
 // Function to start the game
 async function startGame(
+  client,
   message,
   player1,
   player2,
@@ -46,18 +48,38 @@ async function startGame(
       getUserData,
       updateUserData
     );
-  }, 1 * 60 * 1000); // 55 minutes
+  }, 50 * 60 * 1000); // 50 minutes
+
+  const timeWarningEmbed = new EmbedBuilder()
+    .setColor("#FFEA00")
+    .setThumbnail(process.env.TIME_WARNING_ICON)
+    .setTitle("⌛ Time Warning ⌛")
+    .setTimestamp();
 
   // Set warnings at the 30 and 45 minute marks
   const thirtyMinuteWarning = setTimeout(() => {
-    message.channel.send(
-      `${player1} and ${player2}, 30 minutes left in the game!`
+    sendWarning(
+      message.client,
+      player1.id,
+      timeWarningEmbed.setDescription("30 minutes left in the match!")
+    );
+    sendWarning(
+      message.client,
+      player2.id,
+      timeWarningEmbed.setDescription("30 minutes left in the match!")
     );
   }, 30 * 60 * 1000); // 30 minutes
 
   const fortyFiveMinuteWarning = setTimeout(() => {
-    message.channel.send(
-      `${player1} and ${player2}, 15 minutes left in the game!`
+    sendWarning(
+      message.client,
+      player1.id,
+      timeWarningEmbed.setDescription("15 minutes left in the match!")
+    );
+    sendWarning(
+      message.client,
+      player2.id,
+      timeWarningEmbed.setDescription("15 minutes left in the match!")
     );
   }, 45 * 60 * 1000); // 45 minutes
 
@@ -262,6 +284,14 @@ async function finalizeGame(
     gameData.elo[gameData.opponent] || 1000
   );
 }
+
+// Function to send a warning message to a user
+const sendWarning = (client, userId, embed) => {
+  const user = client.users.cache.get(userId);
+  if (user) {
+    user.send({ embeds: [embed] });
+  }
+};
 
 module.exports = {
   startGame,
