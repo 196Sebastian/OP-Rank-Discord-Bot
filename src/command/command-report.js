@@ -59,7 +59,7 @@ async function reportCommand(
   // Confirm the result with the opponent
   const confirmationEmbed = new EmbedBuilder()
     .setTitle("Result Confirmation")
-    .setThumbnail(process.env.REPORT_IMAGE)
+    .setThumbnail(process.env.REPORT_ICON)
     .setDescription(
       `${opponentUser}, ${message.author} has reported the result as: ${result}. React with ✅ to confirm or ❌ to reject.`
     );

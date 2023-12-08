@@ -52,7 +52,6 @@ async function startGame(
 
   const timeWarningEmbed = new EmbedBuilder()
     .setColor("#FFEA00")
-    .setThumbnail(process.env.TIME_WARNING_ICON)
     .setTitle("⌛ Time Warning ⌛")
     .setTimestamp();
 
@@ -61,12 +60,16 @@ async function startGame(
     sendWarning(
       message.client,
       player1.id,
-      timeWarningEmbed.setDescription("30 minutes left in the match!")
+      timeWarningEmbed
+        .setDescription("30 minutes left in the match!")
+        .setThumbnail(process.env.TIME_WARNING_ICON)
     );
     sendWarning(
       message.client,
       player2.id,
-      timeWarningEmbed.setDescription("30 minutes left in the match!")
+      timeWarningEmbed
+        .setDescription("30 minutes left in the match!")
+        .setThumbnail(process.env.THIRTY_TIME_WARNING_ICON)
     );
   }, 30 * 60 * 1000); // 30 minutes
 
@@ -74,12 +77,16 @@ async function startGame(
     sendWarning(
       message.client,
       player1.id,
-      timeWarningEmbed.setDescription("15 minutes left in the match!")
+      timeWarningEmbed
+        .setDescription("15 minutes left in the match!")
+        .setThumbnail(process.env.FORTY_FIVE_TIME_WARNING_ICON)
     );
     sendWarning(
       message.client,
       player2.id,
-      timeWarningEmbed.setDescription("15 minutes left in the match!")
+      timeWarningEmbed
+        .setDescription("15 minutes left in the match!")
+        .setThumbnail(process.env.FORTY_FIVE_TIME_WARNING_ICON)
     );
   }, 45 * 60 * 1000); // 45 minutes
 

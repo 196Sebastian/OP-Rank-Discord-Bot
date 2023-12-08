@@ -22,7 +22,7 @@ async function leaderboardCommand(db, client, message, args, getRankByElo) {
       .setTitle("☠️💰 Wanted Posters 💰☠️")
       .setDescription("Top 5 wanted poster for each rank.")
       .setColor("#e8b923")
-      .setThumbnail(process.env.WANTED)
+      .setThumbnail(process.env.WANTED_POSTER_ICON)
       .addFields({ name: "\u200B", value: " " });
     // Display the leaderboard with usernames and separate sections for each rank
     for (const [rank, users] of Object.entries(groupedByRank)) {

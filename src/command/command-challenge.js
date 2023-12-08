@@ -51,7 +51,7 @@ async function challengeCommand(
   // Create a challenge message with reactions
   const challengeEmbed = new EmbedBuilder()
     .setColor("#880808")
-    .setThumbnail(process.env.FIGHT_LUFFY)
+    .setThumbnail(process.env.CHALLENGE_ICON)
     .setTitle("⚔️ CHALLENGE ⚔️")
     .setDescription(`${message.author} has challenged ${opponent} to a match.`)
     .addFields({
