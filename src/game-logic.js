@@ -183,6 +183,7 @@ async function endGame(
 
 // Function to finalize the game with the reported result
 async function finalizeGame(
+  client,
   db,
   message,
   reporter,
@@ -191,7 +192,8 @@ async function finalizeGame(
   result,
   games,
   getUserData,
-  updateUserData
+  updateUserData,
+  confirmationMessage
 ) {
   const gameData = games.get(gameId);
 
@@ -211,15 +213,30 @@ async function finalizeGame(
   gameData.result = result;
 
   // Determine winner and loser based on player reports
-  if (result.toLowerCase() === "win") {
-    gameData.winner = reporter.id;
-    gameData.loser = opponentUser.id;
-  } else if (result.toLowerCase() === "lost") {
-    gameData.winner = opponentUser.id;
-    gameData.loser = reporter.id;
+  if (reporter.id === gameData.challenger && result.toLowerCase() === "win") {
+    gameData.winner = gameData.challenger;
+    gameData.loser = gameData.opponent;
+  } else if (
+    reporter.id === gameData.opponent &&
+    result.toLowerCase() === "win"
+  ) {
+    gameData.winner = gameData.opponent;
+    gameData.loser = gameData.challenger;
+  } else if (
+    reporter.id === gameData.challenger &&
+    result.toLowerCase() === "lost"
+  ) {
+    gameData.winner = gameData.opponent;
+    gameData.loser = gameData.challenger;
+  } else if (
+    reporter.id === gameData.opponent &&
+    result.toLowerCase() === "lost"
+  ) {
+    gameData.winner = gameData.challenger;
+    gameData.loser = gameData.opponent;
   } else {
-    // Handle other result cases as needed
-    message.channel.send(`Invalid result: ${result}`);
+    // Handle invalid reporter or result
+    message.channel.send(`Invalid reporter or result: ${reporter}`);
     return;
   }
 
@@ -252,17 +269,37 @@ async function finalizeGame(
     },
     db
   );
+  // Delete the initial confirmation message
+  if (confirmationMessage) {
+    confirmationMessage.delete().catch(console.error);
+  }
 
+  // Fetch User objects from Discord API
+  const winnerUser = await client.users
+    .fetch(gameData.winner)
+    .catch(console.error);
+  const loserUser = await client.users
+    .fetch(gameData.loser)
+    .catch(console.error);
+
+  console.log(`winner: ${winnerUser.tag}`);
+  console.log(`loser: ${loserUser.tag}`);
   // Display the result
   const resultEmbed = new EmbedBuilder();
   resultEmbed
     .setTitle("Game Result")
+    .setThumbnail(process.env.ELO_RESULT_ICON)
     .setDescription(
       `The game between ${reporter} and ${opponentUser} has ended. Result: ${result}`
     )
     .addFields({
-      name: "Elo Changes",
-      value: `${reporter}: ${eloChange.winner}\n${opponentUser}: ${eloChange.loser}`,
+      name: "Winner Elo Changes",
+      value: `🟢 ${winnerUser.tag}: ${eloChange.winner} ${eloChange.winnerDifference} ⬆️`,
+    })
+    .addFields({
+      name: "Loser Elo Changes",
+      value: `🔴 ${loserUser.tag}: ${eloChange.loser} ${eloChange.loserDifference} ⬇️`,
+      inline: true,
     });
 
   message.channel.send({ embeds: [resultEmbed] });

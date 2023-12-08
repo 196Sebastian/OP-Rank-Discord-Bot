@@ -29,8 +29,8 @@ function processCommand(db, client, message) {
       );
     } else if (command === "/report") {
       reportCommand(
-        db,
         client,
+        db,
         message,
         args,
         games,

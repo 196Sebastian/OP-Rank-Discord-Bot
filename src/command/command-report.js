@@ -2,8 +2,8 @@ require("dotenv").config();
 const { EmbedBuilder } = require("discord.js");
 
 async function reportCommand(
-  db,
   client,
+  db,
   message,
   args,
   games,
@@ -78,7 +78,7 @@ async function reportCommand(
 
   const collector = confirmationMessage.createReactionCollector({
     filter,
-    time: 30000, // Set a time limit for confirmation
+    time: 45000,
   });
 
   collector.on("collect", (reaction) => {
@@ -87,6 +87,7 @@ async function reportCommand(
     if (reaction.emoji.name === "✅") {
       // Confirm the result
       finalizeGame(
+        client,
         db,
         message,
         message.author,
@@ -95,7 +96,8 @@ async function reportCommand(
         result,
         games,
         getUserData,
-        updateUserData
+        updateUserData,
+        confirmationMessage
       );
     } else {
       // Reject the result
@@ -105,8 +107,19 @@ async function reportCommand(
 
   collector.on("end", (collected, reason) => {
     if (reason === "time") {
-      // Handle timeout logic
-      message.channel.send("Result confirmation timed out.");
+      // Delete the initial confirmation message
+      confirmationMessage.delete().catch(console.error);
+
+      // Create an error embed for timeout
+      const errorEmbed = new EmbedBuilder()
+        .setColor("#CC5500")
+        .setTitle("⚠️ Error Collecting Reactions ⚠️")
+        .setDescription("Result confirmation timed out.")
+        .setThumbnail(process.env.ERROR_ICON)
+        .setTimestamp();
+
+      // Send the error embed
+      message.channel.send({ embeds: [errorEmbed] });
     }
   });
 }

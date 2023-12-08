@@ -9,24 +9,24 @@ function calculateEloChange(winnerElo, loserElo) {
   // Ensure that winnerElo and loserElo are valid numbers
   if (isNaN(winnerElo) || isNaN(loserElo)) {
     console.error("Invalid Elo values for calculation.");
-    return { winner: 0, loser: 0 }; // Return default values or handle accordingly
+    return { winner: 0, loser: 0, winnerDifference: 0, loserDifference: 0 };
   }
 
   const expectedWinnerScore = 1 / (1 + 10 ** ((loserElo - winnerElo) / 400));
   const expectedLoserScore = 1 / (1 + 10 ** ((winnerElo - loserElo) / 400));
 
-  const winnerNewElo = Math.round(
-    winnerElo + kFactor * (1 - expectedWinnerScore)
-  );
-  const loserNewElo = Math.round(loserElo + kFactor * (0 - expectedLoserScore));
+  const winnerEloChange = Math.round(kFactor * (1 - expectedWinnerScore));
+  const loserEloChange = Math.round(kFactor * (0 - expectedLoserScore));
 
-  // Log additional information for debugging
-  console.log("Expected Winner Score:", expectedWinnerScore);
-  console.log("Expected Loser Score:", expectedLoserScore);
-  console.log("Winner New Elo:", winnerNewElo);
-  console.log("Loser New Elo:", loserNewElo);
+  const winnerNewElo = Math.round(winnerElo + winnerEloChange);
+  const loserNewElo = Math.round(loserElo + loserEloChange);
 
-  return { winner: winnerNewElo, loser: loserNewElo };
+  return {
+    winner: winnerNewElo,
+    loser: loserNewElo,
+    winnerDifference: winnerEloChange,
+    loserDifference: loserEloChange,
+  };
 }
 
 // Function to calculate Elo change with penalty
