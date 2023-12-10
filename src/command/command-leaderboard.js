@@ -17,16 +17,19 @@ async function leaderboardCommand(db, client, message, args, getRankByElo) {
       groupedByRank[rank].push(user);
     });
 
-    // Create the embed
+    // Create the leaderboard Embed
     const leaderboardEmbed = new EmbedBuilder()
       .setTitle("☠️💰 Wanted Posters 💰☠️")
       .setDescription("Top 5 wanted poster for each rank.")
       .setColor("#e8b923")
       .setThumbnail(process.env.WANTED_POSTER_ICON)
       .addFields({ name: "\u200B", value: " " });
+
     // Display the leaderboard with usernames and separate sections for each rank
     for (const [rank, users] of Object.entries(groupedByRank)) {
       const rankTitle = `『 ${rank} 』`;
+
+      let rankField = ""; // Create a single field for each rank
 
       for (
         let userIndex = 0;
@@ -34,42 +37,30 @@ async function leaderboardCommand(db, client, message, args, getRankByElo) {
         userIndex++
       ) {
         const user = users[userIndex];
+
         try {
           const userObject = await client.users.fetch(user.id);
           const username = userObject.username;
-          leaderboardEmbed.addFields(
-            {
-              name: rankTitle,
-              value: "\u200B",
-            },
-            {
-              name: "🏴‍☠️",
-              value: `${userIndex + 1}. ${username}`,
-            },
-            {
-              name: "🪙",
-              value: `Ꞗ ${user.elo.toString()}`,
-              inline: true,
-            },
-            {
-              name: "✅",
-              value: `Wins: ${user.wins.toString()}`,
-              inline: true,
-            },
-            {
-              name: "❌",
-              value: `Losses: ${user.losses.toString()}`,
-              inline: true,
-            }
-          );
+          const avatarUrl = userObject.avatarURL({
+            format: "png",
+            dynamic: true,
+            size: 64,
+          });
+
+          rankField += `\n「 🏴‍☠️ ${userIndex + 1}. ${username} 」\n`;
+          rankField += `🪙 Ꞗ ${user.elo.toString()} » ✅ Wins: ${user.wins.toString()} » ❌ Losses: ${user.losses.toString()}\n`;
         } catch (error) {
           console.error("Error fetching user:", error);
-          leaderboardEmbed.addFields({
-            name: `${userIndex + 1}. User ID: ${user.id}`,
-            value: "Error fetching username",
-          });
+          rankField += `\n${userIndex + 1}. User ID: ${
+            user.id
+          }\nError fetching username\n`;
         }
       }
+
+      leaderboardEmbed.addFields({
+        name: rankTitle,
+        value: rankField,
+      });
     }
 
     // Send the embed to the channel
