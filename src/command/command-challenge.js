@@ -48,6 +48,35 @@ async function challengeCommand(
     return;
   }
 
+  // Check if the users are in the same voice channel
+  const authorMember = message.guild.members.cache.get(message.author.id);
+  const opponentMember = message.guild.members.cache.get(opponent.id);
+
+  const autherVoice = authorMember.voice.channel;
+  const opponentVoice = opponentMember.voice.channel;
+
+  console.log(`Auther Voice ID: ${autherVoice}`);
+  console.log(`Opponent Voice ID: ${opponentVoice}`);
+
+  if (!autherVoice || !opponentVoice || autherVoice !== opponentVoice) {
+    // Create a message for if users are not in the same VC
+    const voiceChatEmbed = new EmbedBuilder()
+      .setColor("#880808")
+      .setImage(process.env.VOICE_CHAT_WARNING_ICON)
+      .setTitle("🚨 STOP 🚨")
+      .setDescription(
+        "Users are not in the same voice channel.\nChallenge aborted."
+      )
+      .addFields({
+        name: "Instructions",
+        value:
+          "Before the match starts, make sure users are in the same voice chat.",
+      });
+
+    message.reply({ embeds: [voiceChatEmbed] });
+    return;
+  }
+
   // Create a challenge message with reactions
   const challengeEmbed = new EmbedBuilder()
     .setColor("#880808")
