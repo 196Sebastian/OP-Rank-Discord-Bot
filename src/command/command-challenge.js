@@ -40,11 +40,13 @@ async function challengeCommand(
     return;
   }
 
-  // Check if the opponent is in an ongoing game
-  const isOpponentInGame = await isUserInGame(opponent.id, games, getUserData);
+  // Check if the challenger or the opponent is in an ongoing game
+  const isEitherInGame =
+    (await isUserInGame(message.author.id, games, getUserData, db)) ||
+    (await isUserInGame(opponent.id, games, getUserData, db));
 
-  if (isOpponentInGame) {
-    message.reply("Sorry, the opponent is already in a game.");
+  if (isEitherInGame) {
+    message.reply("Sorry, one or both players are already in a game.");
     return;
   }
 
@@ -282,27 +284,23 @@ function generateGameId() {
   return uuidv4();
 }
 
-async function isUserInGame(userId, games, getUserData) {
+async function isUserInGame(userId, games, getUserData, db) {
   for (const game of games.values()) {
     try {
-      const challengerData = await getUserData(game.challenger);
-      const opponentData = await getUserData(game.opponent);
+      const usersInGame = [game.challenger, game.opponent];
 
-      // Check if the user data is available and has a valid ID
-      if (
-        challengerData &&
-        opponentData &&
-        challengerData.id &&
-        opponentData.id
-      ) {
-        if (
-          (game.state === "pending" || game.state === "accepted") &&
-          (challengerData.id === userId || opponentData.id === userId)
-        ) {
+      // Check if the user is either the challenger or the opponent and is in the game
+      if (usersInGame.includes(userId) && game.state !== "ended") {
+        const [challengerData, opponentData] = await Promise.all(
+          usersInGame.map((id) => getUserData(id, db))
+        );
+
+        // Check if the user data is available and has a valid ID
+        if (challengerData && opponentData) {
           return true;
+        } else {
+          console.error(`Invalid user data for game ID ${game.id}`);
         }
-      } else {
-        console.error(`Invalid user data for game ID ${game.id}`);
       }
     } catch (error) {
       console.error(`Error checking user data for game ID ${game.id}:`, error);
