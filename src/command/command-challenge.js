@@ -52,29 +52,41 @@ async function challengeCommand(
   const authorMember = message.guild.members.cache.get(message.author.id);
   const opponentMember = message.guild.members.cache.get(opponent.id);
 
-  const autherVoice = authorMember.voice.channel;
-  const opponentVoice = opponentMember.voice.channel;
+  const authorVoice = authorMember.voice.channel?.parentId ?? null;
+  const opponentVoice = opponentMember.voice.channel?.parentId ?? null;
 
-  console.log(`Auther Voice ID: ${autherVoice}`);
-  console.log(`Opponent Voice ID: ${opponentVoice}`);
+  // Check if both users are in the same category (replace 'Your Category Name' with the actual category name)
+  const targetCategoryName = "Rank-Tables";
 
-  if (!autherVoice || !opponentVoice || autherVoice !== opponentVoice) {
-    // Create a message for if users are not in the same VC
-    const voiceChatEmbed = new EmbedBuilder()
-      .setColor("#880808")
-      .setImage(process.env.VOICE_CHAT_WARNING_ICON)
-      .setTitle("🚨 STOP 🚨")
-      .setDescription(
-        "Users are not in the same voice channel.\nChallenge aborted."
-      )
-      .addFields({
-        name: "Instructions",
-        value:
-          "Before the match starts, make sure users are in the same voice chat.",
-      });
+  try {
+    // Fetch the guild information
+    const guild = await message.guild.fetch();
 
-    message.reply({ embeds: [voiceChatEmbed] });
-    return;
+    const allChannels = [...guild.channels.cache.values()];
+    const parentChannel = allChannels.find(
+      (channel) => channel.name === targetCategoryName
+    );
+
+    // Log all channels for additional information
+    console.log(`Challenger Voice: ${authorVoice}`);
+    console.log(`Opponent Voice: ${opponentVoice}`);
+
+    if (!authorVoice || !opponentVoice || !parentChannel.id) {
+      // Create a message for if users are not in the same VC
+      const voiceChatEmbed = new EmbedBuilder()
+        .setColor("#880808")
+        .setThumbnail(process.env.VOICE_CHAT_WARNING_ICON)
+        .setTitle("🚨 Attention 🚨")
+        .setTimestamp()
+        .setDescription(
+          `Challenge command aborted. \nBefore users can initiate a challenge, both users must be in the same voice channel within ${targetCategoryName}.`
+        );
+
+      message.reply({ embeds: [voiceChatEmbed] });
+      return;
+    }
+  } catch (error) {
+    console.error("Error fetching guild information:", error);
   }
 
   // Create a challenge message with reactions
