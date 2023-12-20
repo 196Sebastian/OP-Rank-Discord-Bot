@@ -22,22 +22,13 @@ async function challengeCommand(
 
   // Check if the user mentioned another user
   const opponent = message.mentions.users.first();
-
   if (!opponent) {
     message.reply("Sorry, you need to mention a user to challenge.");
     return;
   }
 
-  // Check if the user is challenging themselves
-  if (opponent.id === message.author.id) {
-    message.reply("Sorry, you cannot challenge yourself.");
-    return;
-  }
-
-  // Check if the opponent is a bot
-  if (opponent.bot) {
-    message.reply("Sorry, you cannot challenge a bot.");
-    return;
+  if (opponent.id === message.author.id || opponent.bot) {
+    return message.reply("Sorry, you cannot challenge yourself or a bot.");
   }
 
   // Check if the challenger or the opponent is in an ongoing game
@@ -50,22 +41,22 @@ async function challengeCommand(
     return;
   }
 
-  // Check if the users are in the same voice channel
-  const authorMember = message.guild.members.cache.get(message.author.id);
-  const opponentMember = message.guild.members.cache.get(opponent.id);
-
-  const authorVoice = authorMember.voice.channel?.parentId ?? null;
-  const opponentVoice = opponentMember.voice.channel?.parentId ?? null;
-
   // Check if both users are in the same category (replace 'Your Category Name' with the actual category name)
   const targetCategoryName = "Rank-Tables";
 
   try {
+    // Check if the users are in the same voice channel
+    const authorVoice =
+      message.guild.members.cache.get(message.author.id).voice.channel
+        ?.parentId ?? null;
+
+    const opponentVoice =
+      message.guild.members.cache.get(opponent.id).voice.channel?.parentId ??
+      null;
+
     // Fetch the guild information
     const guild = await message.guild.fetch();
-
-    const allChannels = [...guild.channels.cache.values()];
-    const parentChannel = allChannels.find(
+    const parentChannel = guild.channels.cache.find(
       (channel) => channel.name === targetCategoryName
     );
 
@@ -84,8 +75,7 @@ async function challengeCommand(
           `Challenge command aborted. \nBefore users can initiate a challenge, both users must be in the same voice channel within ${targetCategoryName}.`
         );
 
-      message.reply({ embeds: [voiceChatEmbed] });
-      return;
+      return message.reply({ embeds: [voiceChatEmbed] });
     }
   } catch (error) {
     console.error("Error fetching guild information:", error);
@@ -259,23 +249,26 @@ async function challengeCommand(
       challengeMessage.edit({ embeds: [declinedEmbed] });
     }
   } catch (error) {
-    console.log(`ERROR: ${error}`);
-    // Challenge declined
-    games.delete(gameId);
+    console.log(`ERROR:`, error);
 
-    // Delete the initial challenge message
-    challengeMessage.delete().catch(console.error);
+    if (error instanceof Map) {
+      // Challenge declined
+      games.delete(gameId);
 
-    // Create an error embed for timeout
-    const errorEmbed = new EmbedBuilder()
-      .setColor("#CC5500")
-      .setTitle("⚠️ Error Collecting Reactions ⚠️")
-      .setDescription("Challenge timed out.")
-      .setThumbnail(process.env.ERROR_ICON)
-      .setTimestamp();
+      // Delete the initial challenge message
+      challengeMessage.delete().catch(console.error);
 
-    // Send the error embed
-    message.channel.send({ embeds: [errorEmbed] });
+      // Create an error embed for timeout
+      const errorEmbed = new EmbedBuilder()
+        .setColor("#CC5500")
+        .setTitle("⚠️ Error Collecting Reactions ⚠️")
+        .setDescription("Challenge timed out.")
+        .setThumbnail(process.env.ERROR_ICON)
+        .setTimestamp();
+
+      // Send the error embed
+      message.channel.send({ embeds: [errorEmbed] });
+    }
   }
 }
 
